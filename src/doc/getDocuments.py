@@ -184,14 +184,16 @@ def getDocsSingle(data,api_key,cse_id):
 		for d in data:
 			claim = d['claim']
 			docs = getDocsForClaim(claim,api_key,cse_id)
-			a.append({'predicted_pages':docs})
+			d['predicted_pages'] = docs
+			a.append(d)
 		return a
 
 
 def getDocsBatch(file,api_key,cse_id):
 	for line in open(file):
 		line = json.loads(line.strip())
-		yield getDocsForClaim(line['claim'],api_key,cse_id)
+		line['predicted_pages'] = getDocsForClaim(line['claim'],api_key,cse_id)
+		yield line
 
 # getDocsSingle({'id':0,'claim':'The Dark Tower is a fantasy film.'})
 #print(getDocsSingle([{'id':0,'claim':'The Dark Tower is a fantasy film.'},{'id':1,'claim':'"Down With Love is a 2003 comedy film.'}]))
