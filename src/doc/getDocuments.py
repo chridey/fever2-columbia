@@ -170,7 +170,7 @@ def getDocsForClaim(claim,api_key,cse_id):
 		if 'disambiguation' not in elem or 'List_of_' not in elem:
 			if elem not in docs:
 				docs.append(elem)
-
+	docs = [[d] for d in docs ]
 	return docs
 
 
