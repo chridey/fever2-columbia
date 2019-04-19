@@ -184,7 +184,7 @@ def getDocsSingle(data,api_key,cse_id):
 		for d in data:
 			claim = d['claim']
 			docs = getDocsForClaim(claim,api_key,cse_id)
-			a.append(docs)
+			a.append({'predicted_pages':docs})
 		return a
 
 
