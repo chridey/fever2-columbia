@@ -206,4 +206,4 @@ if __name__ == '__main__':
 
     with open(outfilename, 'w') as outfile:
         for docs in getDocsBatch(filename, api_key, cse_id):
-            print(json.dumps(docs, file=outfile))
+            print(json.dumps(docs), file=outfile)
