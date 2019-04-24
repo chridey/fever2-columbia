@@ -79,8 +79,8 @@ def eval_model(args) -> Model:
         predicted.append(cls)
 
         if args.log is not None:
-            f.write(json.dumps({"actual":gold,"predicted":cls,
-                                "predicted_sentences":predicted_sentences})+"\n")
+            f.write(json.dumps({"actual":gold,"predicted_label":cls,
+                                "predicted_evidence":predicted_sentences})+"\n")
 
     if args.log is not None:
         f.close()

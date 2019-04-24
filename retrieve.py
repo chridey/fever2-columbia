@@ -15,7 +15,7 @@ ner_predictor = Predictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp
 with open(args.config) as f:
     config = json.load(f)
 
-with open(args.in_file, 'w') as outfile:
-    for docs in getDocsBatch(args.out_file, config['api_key'], config['cse_id'],ner_predictor):
-        print(json.dumps(docs, file=outfile))
+with open(args.out_file, 'w') as outfile:
+    for docs in getDocsBatch(args.in_file, config['api_key'], config['cse_id'],ner_predictor):
+        print(json.dumps(docs), file=outfile)
                             
