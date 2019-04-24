@@ -1,3 +1,10 @@
+# For Doc Retrival one of our components depends on Google Custom Search. 
+
+* To be able to use this one needs to create a developer API Key
+  More information here : https://support.google.com/googleapi/answer/6158862?hl=en
+* Custom Search ID 
+
+
 # Sample FEVER2.0 builder docker image
 
 The FEVER2.0 shared task requires builders to submit Docker images (via dockerhub) as part of the competition to allow 

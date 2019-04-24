@@ -7,7 +7,7 @@ ln -s $root_dir/data data
 
 echo "start document retrieval"
 python retrieve.py $1 /tmp/ir.$(basename $1) \
-    --config docker_config.json
+    --config system_config.json
 
 echo "start prediction"
 python eval.py http://www1.cs.columbia.edu/nlp/fever/model.tar.gz  \

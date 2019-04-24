@@ -109,8 +109,7 @@ def addHeuristics(l,claim):
 
 	return l
 
-def getDocumentsForNer(claim):
-	predictor = Predictor.from_path("fine-grained-ner-model-elmo-2018.12.21.tar.gz")
+def getDocumentsForNer(claim,predictor):
 	results = predictor.predict(sentence=claim)
 	f = open('NER.txt','w')
 	for word, tag in zip(results["words"], results["tags"]):
@@ -154,9 +153,9 @@ def getDocumentsForNer(claim):
 	return rec
 
 
-def getDocsForClaim(claim,api_key,cse_id):
+def getDocsForClaim(claim,api_key,cse_id,predictor):
 	docs_google = getDocumentsForClaimFromGoogle(claim,api_key,cse_id)
-	docs_ner = getDocumentsForNer(claim)
+	docs_ner = getDocumentsForNer(claim,predictor)
 	docs_dep_parse = getDocumentsFromDepParse(claim)
 	docs = []
 	for elem in docs_google:
@@ -175,24 +174,24 @@ def getDocsForClaim(claim,api_key,cse_id):
 
 
 
-def getDocsSingle(data,api_key,cse_id):
+def getDocsSingle(data,api_key,cse_id,predictor):
 	if str(type(data))=="<class 'dict'>":
-		return getDocsForClaim(data['claim'],api_key,cse_id)
+		return getDocsForClaim(data['claim'],api_key,cse_id,predictor)
 	if str(type(data))=="<class 'list'>":
 		print('here')
 		a = []
 		for d in data:
 			claim = d['claim']
-			docs = getDocsForClaim(claim,api_key,cse_id)
+			docs = getDocsForClaim(claim,api_key,cse_id,predictor)
 			d['predicted_pages'] = docs
 			a.append(d)
 		return a
 
 
-def getDocsBatch(file,api_key,cse_id):
+def getDocsBatch(file,api_key,cse_id,predictor):
 	for line in open(file):
 		line = json.loads(line.strip())
-		line['predicted_pages'] = getDocsForClaim(line['claim'],api_key,cse_id)
+		line['predicted_pages'] = getDocsForClaim(line['claim'],api_key,cse_id,predictor)
 		yield line
 
 # getDocsSingle({'id':0,'claim':'The Dark Tower is a fantasy film.'})

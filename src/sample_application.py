@@ -39,6 +39,7 @@ def my_sample_fever():
     config = json.load(open(os.getenv("CONFIG_PATH","configs/predict_docker.json")))
 
     #TODO: insert Tuhin initialization
+    ner_predictor = Predictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp/models/fine-grained-ner-model-elmo-2018.12.21.tar.gz")
 
     logger.info("Load Model from {0}".format(config['model']))        
     archive = load_archive(config['model'], cuda_device=config['cuda_device'])
@@ -50,7 +51,7 @@ def my_sample_fever():
             
     # The prediction function that is passed to the web server for FEVER2.0
     def predict(instances):
-        documents = getDocsSingle(data,config['api_key'],config['cse_id'])
+        documents = getDocsSingle(data,config['api_key'],config['cse_id'],ner_predictor)
         predictions = list(predictor.predict(documents, cuda_device=config['cuda_device']))
         return predictions
 
