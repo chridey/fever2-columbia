@@ -11,7 +11,7 @@ import logging
 
 from readers.reader import FEVERReader
 from modeling.esim_rl_ptr_extractor import ESIMRLPtrExtractor
-from predictor import Predictor
+from predictor import Predictor as ColumbiaPredictor
 
 def my_sample_fever():
     logger = logging.getLogger()
@@ -36,7 +36,7 @@ def my_sample_fever():
     })
 
     logger.info("Columbia FEVER application")
-    config = json.load(open(os.getenv("CONFIG_PATH","configs/predict_docker.json")))
+    config = json.load(open(os.getenv("CONFIG_PATH","configs/system_config.json")))
 
     #TODO: insert Tuhin initialization
     ner_predictor = Predictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp/models/fine-grained-ner-model-elmo-2018.12.21.tar.gz")
@@ -47,7 +47,7 @@ def my_sample_fever():
     logger.info("Loading FEVER Reader")
     reader = FEVERReader.from_params(archive.config["dataset_reader"])
     
-    predictor = Predictor(archive.model, reader)
+    predictor = ColumbiaPredictor(archive.model, reader)
             
     # The prediction function that is passed to the web server for FEVER2.0
     def predict(instances):
