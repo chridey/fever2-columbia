@@ -9,6 +9,7 @@ from fever.api.web_server import fever_web_api
 import os
 import logging
 
+from doc.getDocuments import getDocsSingle
 from readers.reader import FEVERReader
 from modeling.esim_rl_ptr_extractor import ESIMRLPtrExtractor
 from predictor import Predictor as ColumbiaPredictor
@@ -51,7 +52,7 @@ def my_sample_fever():
             
     # The prediction function that is passed to the web server for FEVER2.0
     def predict(instances):
-        documents = getDocsSingle(data,config['api_key'],config['cse_id'],ner_predictor)
+        documents = getDocsSingle(instances,config['api_key'],config['cse_id'],ner_predictor)
         predictions = list(predictor.predict(documents, cuda_device=config['cuda_device']))
         return predictions
 
