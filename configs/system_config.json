@@ -1,0 +1,6 @@
+{
+    "model": "http://www1.cs.columbia.edu/nlp/fever/model.tar.gz",
+    "cuda_device": -1,
+    "api_key": "-----",
+    "cse_id": "-----"
+}
