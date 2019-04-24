@@ -1,3 +1,5 @@
+git+https://github.com/facebookresearch/DrQA.git@a03848d216aff1763da7dff5c8d20e35c6ab379e
+git+https://github.com/huggingface/pytorch-pretrained-BERT.git@3ba5470eb85464df62f324bea88e20da234c423f
 alabaster==0.7.12
 allennlp==0.8.3
 asn1crypto==0.24.0
@@ -10,7 +12,6 @@ blis==0.2.4
 boto==2.49.0
 boto3==1.9.126
 botocore==1.12.126
-certifi==2019.3.9
 cffi==1.12.2
 chardet==3.0.4
 Click==7.0
@@ -27,7 +28,6 @@ docutils==0.14
 ecdsa==0.13
 editdistance==0.5.3
 elasticsearch==6.3.1
-en-core-web-sm==2.1.0
 fever-api==1.0.25
 flaky==3.5.3
 Flask==1.0.2
@@ -55,7 +55,7 @@ more-itertools==7.0.0
 moto==1.3.7
 msgpack==0.5.6
 murmurhash==1.0.2
-narrative==0.0.5
+narrative
 nltk==3.4
 numpy==1.16.2
 numpydoc==0.8.0
@@ -63,7 +63,7 @@ overrides==1.9
 packaging==19.0
 parsimonious==0.8.1
 pbr==5.1.3
-pexpect==4.2.1
+pexpect==4.7
 plac==0.9.6
 pluggy==0.9.0
 preshed==2.0.1
