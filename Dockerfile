@@ -22,18 +22,26 @@ RUN apt-get install -y --no-install-recommends --allow-unauthenticated \
     software-properties-common
 
 RUN mkdir /fever
+
 WORKDIR /fever
-
-ADD requirements.txt /fever/
-RUN pip install -r requirements.txt
-
-RUN python -c "import nltk; nltk.download('punkt')"
-
 RUN mkdir -pv src
 RUN mkdir -pv configs
+RUN mkdir -pv data
+
 
 ADD src src
 ADD configs configs
+
+ADD requirements.txt /fever/
+
+export PYTHONPATH="src"
+
+RUN pip install spacy==2.1.3
+RUN python -m spacy download en
+RUN wget -O data/fever.db https://s3-eu-west-1.amazonaws.com/fever.public/wiki_index/fever.db
+RUN ln -s data/fever.db
+RUN pip install -r requirements.txt
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
 
 ADD predict.sh .
 
