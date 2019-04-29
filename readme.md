@@ -140,29 +140,21 @@ Outputs:
  * A list of dictionaries containing `predicted_label` (string in SUPPORTS/REFUTES/NOT ENOUGH INFO) and `predicted_evidence` (list of `(page_name,line_number)` pairs as defined in [`fever-scorer`](https://github.com/sheffieldnlp/fever-scorer).
 
 
-## Common Data
-We provide common data (the Wikipedia parse and the preprocessed data associated with the first FEVER challenge), that will be mounted in in `/local/fever-common` 
+## Testing the Server
 
-It contains the following files (see [fever.ai/resources.html](https://fever.ai/resources.html) for more info):
+After starting the server using waitress, you can test using the requests library:
 
 ```
-# Dataset
-/local/fever-common/data/fever-data/train.jsonl
-/local/fever-common/data/fever-data/paper_dev.jsonl
-/local/fever-common/data/fever-data/paper_test.jsonl
-/local/fever-common/data/fever-data/shared_task_dev.jsonl
-/local/fever-common/data/fever-data/shared_task_test.jsonl
+import requests
+import json
 
-# Preprocessed Wikipedia Dump 
-/local/fever-common/data/fever/fever.db
+url = 'http://0.0.0.0:5000/predict'
+data = {"instances": [{"id":0, "claim":"this is a test claim"},{"id":1,"claim":"this is another test claim"}]}
+headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
 
-# Wikipedia TF-IDF Index
-/local/fever-common/data/index/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz
+r = requests.post(url, data=json.dumps(data), headers=headers)
 
-# Preprocessed Wikipedia Pages (Alternative Format)
-/local/fever-common/data/wiki-pages/wiki-000.jsonl
-...
-/local/fever-common/data/wiki-pages/wiki-109.jsonl
+r.json()
 ```
 
   
