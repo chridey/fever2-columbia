@@ -3,7 +3,11 @@
 * To be able to use this one needs to create a developer API Key
   More information here : https://support.google.com/googleapi/answer/6158862?hl=en
 * Custom Search ID 
+  More information here : https://support.google.com/customsearch/answer/2649143?hl=en
 
+One of the important factors to consider is the first 100 google search api calls is free.
+Then onwards one is charged 5$ for every 1000 search api calls (Limit for one day. You cannot call more than 1000 times using one api-key)
+Having google cloud credits will be helpful in such cases (Free signup gives 300$)
 
 # Sample FEVER2.0 builder docker image
 
