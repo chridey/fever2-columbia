@@ -3,7 +3,11 @@
 * To be able to use this one needs to create a developer API Key
   More information here : https://support.google.com/googleapi/answer/6158862?hl=en
 * Custom Search ID 
+  More information here : https://support.google.com/customsearch/answer/2649143?hl=en
 
+One of the important factors to consider is the first 100 google search api calls is free.
+Then onwards one is charged 5$ for every 1000 search api calls (Limit for one day. You cannot call more than 1000 times using one api-key)
+Having google cloud credits will be helpful in such cases (Free signup gives 300$)
 
 # Sample FEVER2.0 builder docker image
 
@@ -140,29 +144,112 @@ Outputs:
  * A list of dictionaries containing `predicted_label` (string in SUPPORTS/REFUTES/NOT ENOUGH INFO) and `predicted_evidence` (list of `(page_name,line_number)` pairs as defined in [`fever-scorer`](https://github.com/sheffieldnlp/fever-scorer).
 
 
-## Common Data
-We provide common data (the Wikipedia parse and the preprocessed data associated with the first FEVER challenge), that will be mounted in in `/local/fever-common` 
+## Testing the Server
 
-It contains the following files (see [fever.ai/resources.html](https://fever.ai/resources.html) for more info):
+After starting the server using waitress, you can test using the requests library:
 
 ```
-# Dataset
-/local/fever-common/data/fever-data/train.jsonl
-/local/fever-common/data/fever-data/paper_dev.jsonl
-/local/fever-common/data/fever-data/paper_test.jsonl
-/local/fever-common/data/fever-data/shared_task_dev.jsonl
-/local/fever-common/data/fever-data/shared_task_test.jsonl
+import requests
+import json
 
-# Preprocessed Wikipedia Dump 
-/local/fever-common/data/fever/fever.db
+url = 'http://0.0.0.0:5000/predict'
+data = {"instances": [{"id":0, "claim":"this is a test claim"},{"id":1,"claim":"this is another test claim"}]}
+headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
 
-# Wikipedia TF-IDF Index
-/local/fever-common/data/index/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz
+r = requests.post(url, data=json.dumps(data), headers=headers)
 
-# Preprocessed Wikipedia Pages (Alternative Format)
-/local/fever-common/data/wiki-pages/wiki-000.jsonl
-...
-/local/fever-common/data/wiki-pages/wiki-109.jsonl
+r.json()
 ```
 
+```
+{u'data': {u'predictions': [{u'predicted_evidence': [[u'Theranos', 1],
+     [u'One_Million_Dollar_Paranormal_Challenge', 0],
+     [u'This', 0],
+     [u'Theranos', 0],
+     [u'Theranos', 9]],
+    u'predicted_label': u'REFUTES',
+    u'request_instance': {u'claim': u'this is a test claim',
+     u'evidence': [[u'This', 0],
+      [u'Theranos', 0],
+      [u'Theranos', 1],
+      [u'One_Million_Dollar_Paranormal_Challenge', 1],
+      [u'Theranos', 8],
+      [u'One_Million_Dollar_Paranormal_Challenge', 0],
+      [u'Theranos', 7],
+      [u'Theranos', 2],
+      [u'Theranos', 3],
+      [u'Theranos', 4],
+      [u'Theranos', 5],
+      [u'Theranos', 6],
+      [u'This', 4],
+      [u'This', 3],
+      [u'Theranos', 10],
+      [u'One_Million_Dollar_Paranormal_Challenge', 2],                     
+      [u'One_Million_Dollar_Paranormal_Challenge', 3],
+      [u'This', 1],
+      [u'This', 2],
+      [u'Theranos', 9]],
+     u'id': 0,
+     u'predicted_pages': [[u'Theranos'],
+      [u'One_Million_Dollar_Paranormal_Challenge'],
+      [u'This']]}},
+   {u'predicted_evidence': [[u'Turing_test', 12],
+     [u'Turing_test', 10],
+     [u'Turing_test', 0],
+     [u'Turing_test', 8],
+     [u'Turing_test', 16]],
+    u'predicted_label': u'NOT ENOUGH INFO',
+    u'request_instance': {u'claim': u'this is another test claim',
+     u'evidence': [[u'Turing_test', 4],
+      [u'Turing_test', 2],
+      [u'This', 0],
+      [u'Turing_test', 0],
+      [u'Turing_test', 10],
+      [u'Turing_test', 12],
+      [u'Turing_test', 11],
+      [u'Turing_test', 5],
+      [u'Turing_test', 16],
+      [u'Turing_test', 8],
+      [u'Isabella_of_France', 15],
+      [u'Isabella_of_France', 14],
+      [u'Isabella_of_France', 13],
+      [u'Isabella_of_France', 12],
+      [u'Isabella_of_France', 11],
+      [u'Isabella_of_France', 10],
+      [u'This', 4],
+      [u'Isabella_of_France', 9],
+      [u'Isabella_of_France', 8],
+      [u'Isabella_of_France', 17],
+      [u'Isabella_of_France', 7],
+      [u'Isabella_of_France', 6],
+      [u'Isabella_of_France', 5],
+      [u'Isabella_of_France', 4],
+      [u'Isabella_of_France', 3],
+      [u'Isabella_of_France', 2],
+      [u'Isabella_of_France', 1],
+      [u'Isabella_of_France', 16],	
+      [u'Isabella_of_France', 22],                            
+      [u'Isabella_of_France', 18],
+      [u'Turing_test', 9],
+      [u'This', 2],
+      [u'This', 1],
+      [u'Turing_test', 17],
+      [u'Turing_test', 15],
+      [u'Turing_test', 14],
+      [u'Turing_test', 13],
+      [u'Turing_test', 7],
+      [u'Isabella_of_France', 19],
+      [u'Turing_test', 6],
+      [u'Turing_test', 3],
+      [u'Turing_test', 1],
+      [u'This', 3],
+      [u'Isabella_of_France', 21],
+      [u'Isabella_of_France', 20],
+      [u'Isabella_of_France', 0]],
+     u'id': 1,
+     u'predicted_pages': [[u'Isabella_of_France'],
+      [u'Turing_test'],
+      [u'This']]}}]},
+ u'result': u'success'}
+```
   
