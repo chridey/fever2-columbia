@@ -34,7 +34,7 @@ ADD configs configs
 
 ADD requirements.txt /fever/
 
-export PYTHONPATH="src"
+RUN export PYTHONPATH="src"
 
 RUN pip install spacy==2.1.3
 RUN python -m spacy download en
