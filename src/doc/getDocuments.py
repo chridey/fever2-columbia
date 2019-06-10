@@ -57,7 +57,10 @@ def getDocumentsFromDepParse(claim):
             s = s[:-1]
             break
         s = s+ w + ' '
-    entity = wikipedia.search(s,1)
+    if s:
+        entity = wikipedia.search(s,1)
+    else:
+        entity = []
     if len(entity)>0:
         x = entity[0]
         x = x.replace(' ','_')
