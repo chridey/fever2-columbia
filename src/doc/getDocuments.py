@@ -165,9 +165,18 @@ def getDocumentsForNer(claim,predictor):
 
 
 def getDocsForClaim(claim,api_key,cse_id,predictor):
-    docs_google = getDocumentsForClaimFromGoogle(claim,api_key,cse_id)
-    docs_ner = getDocumentsForNer(claim,predictor)
-    docs_dep_parse = getDocumentsFromDepParse(claim)
+    try:
+        docs_google = getDocumentsForClaimFromGoogle(claim,api_key,cse_id)
+    except Exception:
+        docs_google = []
+    try:
+        docs_ner = getDocumentsForNer(claim,predictor)
+    except Exception:
+        docs_google = []
+    try:
+        docs_dep_parse = getDocumentsFromDepParse(claim)
+    except Exception:
+        docs_dep_parse = []
     docs = []
     for elem in docs_google:
             if 'disambiguation' not in elem or 'List_of_' not in elem:
@@ -211,7 +220,7 @@ def getDocsBatch(file,api_key,cse_id,predictor):
 # print(x)
 
 # getDocsSingle({'id':0,'claim':'The Dark Tower is a fantasy film.'})
-#print(getDocsSingle([{'id':0,'claim':'The Dark Tower is a fantasy film.'},{'id':1,'claim':'"Down With Love is a 2003 comedy film.'}]))
+# print(getDocsSingle([{'id':0,'claim':'The Dark Tower is a fantasy film.'},{'id':1,'claim':'"Down With Love is a 2003 comedy film.'}]))
 
 
 
