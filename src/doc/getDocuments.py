@@ -150,7 +150,10 @@ def getDocumentsForNer(claim,predictor):
     rec = []
     a = list(set(entities))
     for ner in a:
-        y = wikipedia.search(ner,1)
+        try:
+            y = wikipedia.search(ner,1)
+        except Exception:
+            y = []
         for x in y:
             x = x.replace(' ','_')
             x = x.replace('(','-LRB-')
@@ -202,8 +205,15 @@ def getDocsBatch(file,api_key,cse_id,predictor):
         line['predicted_pages'] = getDocsForClaim(line['claim'],api_key,cse_id,predictor)
         yield line
 
+
+
+# x = getDocumentsForClaimFromGoogle('The Dark Tower is a fantasy film.','AIzaSyDKwGzwuktKbxrqi7RITt_zt8e3EdSiu-E','003586599067453217566:gyrtvs2l70g')
+# print(x)
+
 # getDocsSingle({'id':0,'claim':'The Dark Tower is a fantasy film.'})
 #print(getDocsSingle([{'id':0,'claim':'The Dark Tower is a fantasy film.'},{'id':1,'claim':'"Down With Love is a 2003 comedy film.'}]))
+
+
 
 if __name__ == '__main__':
     filename = sys.argv[1]
