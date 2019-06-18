@@ -160,7 +160,6 @@ class FEVERReader(BaseReader):
         
         return super().read(file_path)
                 
-    @overrides
     def _iter_data(self, file_path: str, data=None,
               replace_with_gold=False, pad_with_nearest=0,
              include_metadata=False, dedupe=False) -> Iterable[Instance]:
