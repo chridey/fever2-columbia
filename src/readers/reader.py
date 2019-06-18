@@ -99,7 +99,9 @@ class FEVERReader(BaseReader):
         self.evidence_memory_size = evidence_memory_size
         self.max_selected_evidence = max_selected_evidence
         self._prepend_title = prepend_title
-        
+
+        self._read = None
+                
     def prepend_title(self, doc, line):
         if not self._prepend_title:
             return line
@@ -144,9 +146,22 @@ class FEVERReader(BaseReader):
         indices = self.sentence_ranker.rank(claim, sentences)
         instance['evidence'] = [sentence_metadata[i] for i in indices[:self.evidence_memory_size]]
         return instance
-            
+
+    def read(self, file_path: str, data=None,
+             replace_with_gold=False, pad_with_nearest=0,
+             include_metadata=False, dedupe=False) -> Iterable[Instance]:
+
+        def iter_data(file_path):
+            for i in self._iter_data(file_path, data, replace_with_gold, pad_with_nearest,
+                                     include_metadata, dedupe):
+                yield i
+        
+        self._read = iter_data
+        
+        return super().read(file_path)
+                
     @overrides
-    def _read(self, file_path: str, data=None,
+    def _iter_data(self, file_path: str, data=None,
               replace_with_gold=False, pad_with_nearest=0,
              include_metadata=False, dedupe=False) -> Iterable[Instance]:
      
@@ -278,6 +293,7 @@ class FEVERReader(BaseReader):
                     if features is not None:
                         instance_features = features[line_index]
                     else:
+                        #TODO: do this lazily
                         instance_features = self.bert_feature_extractor.forward_on_single(instance['id'],
                                                                                           hypothesis,
                                                                                           premise, label).cpu().numpy().tolist()
