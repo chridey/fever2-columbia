@@ -30,7 +30,7 @@ from allennlp.data.tokenizers.word_splitter import SimpleWordSplitter
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-from .batched_db import BatchedDB, normalize
+from .batched_db import BatchedDB, normalize, process_markup
 from .base_reader import BaseReader
 from .scorers import SimpleSentenceRanker
 from .my_text_field import MyTextField
@@ -58,8 +58,13 @@ class FEVERReader(BaseReader):
                  evidence_memory_size=50,
                  max_selected_evidence=5,
                  sentence_ranker_settings=None,
-                 prepend_title=True) -> None:
+                 prepend_title=True,
+                 bert_batch_mode=False,
+                 cached_features_size=0,
+                 titles_only=False) -> None:
 
+        assert(cached_features_size == 0 or cached_features_size % batch_size == 0)
+        
         super().__init__(lazy)
 
         self._sentence_level = sentence_level
@@ -91,23 +96,32 @@ class FEVERReader(BaseReader):
             self.sentence_ranker = SimpleSentenceRanker(**sentence_ranker_settings)
         
         self.bert_feature_extractor = None
+        self.bert_batch_mode = False
         if bert_extractor_settings is not None:
             self.bert_feature_extractor = BertFeatureExtractor(**bert_extractor_settings,
                                                                label_map=self.label_lookup)
-        
+            self.bert_batch_mode = bert_batch_mode
+            
         self.batch_size = batch_size
         self.evidence_memory_size = evidence_memory_size
         self.max_selected_evidence = max_selected_evidence
         self._prepend_title = prepend_title
 
         self._read = None
-                
+        self._features_cache = collections.defaultdict(dict)
+        self._cached_features_size = cached_features_size
+        
+        self._titles_only = titles_only
+        
     def prepend_title(self, doc, line):
         if not self._prepend_title:
             return line
         return ' '.join(doc.split('_')) + ' : ' + line
         
     def get_doc_line(self,doc,line):
+        if self._titles_only:
+            return normalize(process_markup(doc.split('_')))
+                
         if self.db is None:
             return '{}_{}'.format(doc,line) #TODO
         
@@ -149,11 +163,11 @@ class FEVERReader(BaseReader):
 
     def read(self, file_path: str, data=None,
              replace_with_gold=False, pad_with_nearest=0,
-             include_metadata=False, dedupe=False) -> Iterable[Instance]:
+             include_metadata=False, dedupe=False, start=0) -> Iterable[Instance]:
 
         def iter_data(file_path):
             for i in self._iter_data(file_path, data, replace_with_gold, pad_with_nearest,
-                                     include_metadata, dedupe):
+                                     include_metadata, dedupe, start):
                 yield i
         
         self._read = iter_data
@@ -162,7 +176,7 @@ class FEVERReader(BaseReader):
                 
     def _iter_data(self, file_path: str, data=None,
               replace_with_gold=False, pad_with_nearest=0,
-             include_metadata=False, dedupe=False) -> Iterable[Instance]:
+             include_metadata=False, dedupe=False, start=0) -> Iterable[Instance]:
      
         counter = collections.Counter()
         
@@ -173,23 +187,32 @@ class FEVERReader(BaseReader):
             print('found {} duplicate claims'.format(len(duplicate_claims)))
 
         if self.include_features:
-            features = None
             if os.path.exists(file_path + '.npy'):
-                print('loading features...')                
-                features = np.load(file_path + '.npy')            
-            
-        for instance in self.iter_data(file_path,data):
-            if instance is None or instance['claim'] in duplicate_claims:
+                print('loading features...')
+                features = np.load(file_path + '.npy')
+                indices = range(features.shape[0])
+                self._features_cache[file_path] = dict(zip(indices, features))
+
+        examples = []
+        batch_evidence = []
+        for line_index,instance in enumerate(self.iter_data(file_path,data)):
+            if instance is None or instance['claim'] in duplicate_claims or line_index < start:
+                self._features_cache[line_index] = []
                 continue
 
             if 'gold_evidence' not in instance and 'evidence' in instance:
                 instance['gold_evidence'] = instance['evidence']
-            if self.sentence_ranker is not None and 'predicted_pages' in instance:
-                instance = self.get_top_sentences_from_pages(instance)
-            else:
-                instance['evidence'] = instance['predicted_pages']
+            if self._titles_only:
+                instance['gold_evidence'] = [{(None,None,j[-2],0) for j in i} for i in instance['gold_evidence']]
+            if 'predicted_pages' in instance:
+                if self._titles_only:
+                    instance['evidence'] = [[i[0],0] for i in instance['predicted_pages']]
+                elif self.sentence_ranker is not None:
+                    instance = self.get_top_sentences_from_pages(instance)
+                else:
+                    instance['evidence'] = instance['predicted_pages']
 
-            if 'gold_evidence' in instance:
+            if 'gold_evidence' in instance and instance['gold_evidence'] is not None and len(instance['gold_evidence']):
                 if self._choose_min_evidence:
                     choice = min(zip(range(len(instance['gold_evidence'])),
                                     instance['gold_evidence']),
@@ -275,34 +298,105 @@ class FEVERReader(BaseReader):
 
                     premise = lines 
 
+                batch_evidence.append((evidence, evidence_map, line_index))
+                    
                 if evidence is not None:
                     counter.update(evidence)
 
                 hypothesis = instance["claim"]
                 label = "NOT ENOUGH INFO"
-                if "label" in instance:
-                    label = instance["label"]
+                if "label" in instance and instance['label'] is not None:
+                    label = instance["label"].upper()
+
+                def cache_filename(file_path, line_index):
+                    #get the nearest multiple of cache size
+                    base_line_index = line_index // self._cached_features_size * self._cached_features_size
+                    return '.'.join([file_path, str(base_line_index), 'npy'])
+                                        
+                #read in filename + line_index if it exists
+                if line_index not in self._features_cache[file_path] and os.path.exists(cache_filename(file_path, line_index)):
+                    print('loading features from {}...'.format(line_index))
+                    features = np.load(cache_filename(file_path, line_index))
+                    indices = range(line_index, line_index+features.shape[0])
+                    self._features_cache[file_path] = dict(zip(indices, features))
+
+                if self.include_features and not self.bert_batch_mode and line_index not in self._features_cache[file_path]:
+                    instance_features = self.bert_feature_extractor.forward_on_single(instance['id'],
+                                                                                      hypothesis,
+                                                                                      premise,
+                                                                                      label).cpu().numpy().tolist()
+                    self._features_cache[file_path][line_index] = instance_features
+                elif self.bert_batch_mode and len(premise) < self.evidence_memory_size:
+                    premise = list(premise) + ['']*(self.evidence_memory_size-len(premise))
+                
+                examples.append([instance['id'], hypothesis, None, label, premise])
+
+                if len(examples) >= self.batch_size:
+                    batch_features = None
+                    if self.include_features and batch_evidence[0][-1] not in self._features_cache[file_path]:
+                        batch_features = self.bert_feature_extractor.forward(examples).cpu().numpy().tolist()
+                        indices = range(line_index, line_index+self.batch_size)
+                        self._features_cache[file_path] = dict(zip(indices, batch_features))
+
+                    for idx,(_,hypothesis,_,label,premise) in enumerate(examples):
+                        evidence, evidence_map, line_index = batch_evidence[idx]
+                        
+                        evidence_metadata = None
+                        if include_metadata:
+                            evidence_metadata = [evidence_map[i] for i in premise if len(i)]
+
+                        instance_features = None
+                        if self.include_features:
+                            instance_features = self._features_cache[file_path][line_index]
+                                
+                        yield self.text_to_instance(premise, hypothesis, label, evidence,
+                                                instance_features, evidence_metadata)
+
+                    examples = []
+                    batch_evidence = []
+
+                #write cache to disk if it is full and filename + line_index does not exist
+                if self._cached_features_size and len(self._features_cache[file_path]) >= self._cached_features_size and not os.path.exists(cache_filename(file_path, line_index)):
+                    _,features = zip(*sorted(self._features_cache[file_path].items(),
+                                             key=lambda x:x[0]))
+                    print(line_index, len(self._features_cache[file_path]))
+                    np.save(cache_filename(file_path, line_index),
+                            np.array(features))
+                #clear cache if we are at the end of the batch
+                if (line_index + 1) % self._cached_features_size == 0:
+                    self._features_cache[file_path] = {}                                            
+
+        #handle the leftovers
+
+        if len(examples):
+            batch_features = None
+            if self.include_features and batch_evidence[0][-1] not in self._features_cache[file_path]:
+                batch_features = self.bert_feature_extractor.forward(examples).cpu().numpy().tolist()
+                indices = range(line_index, line_index+self.batch_size)
+                self._features_cache[file_path] = dict(zip(indices, batch_features))
+
+            for idx,(_,hypothesis,_,label,premise) in enumerate(examples):
+                evidence, evidence_map, line_index = batch_evidence[idx]
 
                 evidence_metadata = None
                 if include_metadata:
-                    evidence_metadata = [evidence_map[i] for i in lines]
+                    evidence_metadata = [evidence_map[i] for i in premise if len(i)]
 
                 instance_features = None
                 if self.include_features:
-                    if features is not None:
-                        instance_features = features[line_index]
-                    else:
-                        #TODO: do this lazily
-                        instance_features = self.bert_feature_extractor.forward_on_single(instance['id'],
-                                                                                          hypothesis,
-                                                                                          premise, label).cpu().numpy().tolist()
-
-                    if len(instance_features) < self.max_selected_evidence:
-                        instance_features = [[0]*len(instance_features[0])]*(self.max_selected_evidence-len(instance_features)) + instance_features
+                    instance_features = self._features_cache[file_path][line_index]
 
                 yield self.text_to_instance(premise, hypothesis, label, evidence,
-                                            instance_features, evidence_metadata)
+                                        instance_features, evidence_metadata)
 
+        if self._cached_features_size and len(self._features_cache[file_path]) and not os.path.exists(cache_filename(file_path, line_index)):
+            _,features = zip(*sorted(self._features_cache[file_path].items(),
+                                     key=lambda x:x[0]))
+            print(line_index, len(self._features_cache[file_path]))
+            np.save(cache_filename(file_path, line_index),
+                    np.array(features))
+        self._features_cache[file_path] = {}                                            
+                                            
     @overrides
     def text_to_instance(self,  # type: ignore
                          premise: str,
@@ -311,23 +405,30 @@ class FEVERReader(BaseReader):
                          evidence: Union[str,int] = None,
                          features = None,
                          evidence_metadata=None) -> Instance:
+        
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
         fields['premise'] = None
-        if premise is not None:
+        if premise is not None:            
             if self.list_field:
-                if evidence_metadata is None:
-                    premise_tokens = [TextField(self._wiki_tokenizer.tokenize(p)[:self.evidence_memory_size],
+                if len(premise) < self.max_selected_evidence:
+                    evidence_metadata.extend([['N/A',0]]*(self.max_selected_evidence-len(premise)))
+                    premise = list(premise) + ['']*(self.max_selected_evidence-len(premise))
+                #if evidence_metadata is None:
+                premise_tokens = [TextField(self._wiki_tokenizer.tokenize(p)[:self.evidence_memory_size],
                                                 self._token_indexers) for p in premise]
-                else:
-                    premise_tokens = [MyTextField(self._wiki_tokenizer.tokenize(p)[:self.evidence_memory_size],
-                                                self._token_indexers,
-                                                m) for p,m in zip(premise,
-                                                                  evidence_metadata)]
+                #else:
+                #    premise_tokens = [MyTextField(self._wiki_tokenizer.tokenize(p)[:self.evidence_memory_size],
+                #                                self._token_indexers,
+                #                                m) for p,m in zip(premise,
+                #                                                  evidence_metadata)]
                 fields['premise'] = ListField(premise_tokens)
             else:
                 fields['premise'] = TextField(self._wiki_tokenizer.tokenize(' '.join(premise)),
                                               self._token_indexers)
+
+        if evidence_metadata is not None:
+            fields['metadata'] = MetadataField(evidence_metadata)
                 
         hypothesis_tokens = self._claim_tokenizer.tokenize(hypothesis)
         fields['hypothesis'] = TextField(hypothesis_tokens, self._token_indexers)
@@ -343,6 +444,8 @@ class FEVERReader(BaseReader):
                 fields['evidence'] = SequenceLabelField(evidence, fields['premise'], 'evidence_labels')
 
         if features is not None:
+            if len(features) < self.max_selected_evidence:
+                features += [[0] * len(features[0])] * (self.max_selected_evidence - len(features))
             fields['features'] = ArrayField(np.array(features[:self.evidence_memory_size]))
             
         return Instance(fields)

@@ -18,7 +18,7 @@ except ImportError:
     print('cant last_dim_softmax')
 from allennlp.nn.util import weighted_sum, get_text_field_mask, device_mapping
 
-from .utils import *
+from .utils.utils import *
 
 class ESIM(torch.nn.Module):
     """

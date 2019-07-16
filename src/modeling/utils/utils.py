@@ -14,6 +14,35 @@ def prob_normalize(score, mask):
 
 
 #################### general sequence helper #########################
+def make_label_sequence(predictions, evidences, labels, pad_idx=-1, nei_label=0):
+    label_sequences = []
+    for prediction, evidence, label in zip(predictions, evidences, labels):
+        evidence = set(e.item() for e in evidence) - {pad_idx}
+        prediction_state = set()
+        label_sequence = []
+        for idx in prediction.view(-1):
+            if label == nei_label:
+                label_sequence.append(nei_label)
+                continue
+               
+            idx = idx.item()
+            if idx == pad_idx:
+                label_sequence.append(idx)
+                continue
+            prediction_state.add(idx)
+            if evidence.issubset(prediction_state):
+                label_sequence.append(label.item())
+            else:
+                label_sequence.append(nei_label)
+
+        label_sequences.append(label_sequence)
+        
+    label_sequences = torch.LongTensor(label_sequences)
+    if torch.cuda.is_available() and labels.is_cuda:
+        idx = labels.get_device()
+        label_sequences = label_sequences.cuda(idx)                
+    return label_sequences
+
 def len_mask(lens, max_len=None, dtype=torch.ByteTensor):
     """ users are resposible for shaping
     Return: tensor_type [B, T]

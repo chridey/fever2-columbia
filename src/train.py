@@ -7,7 +7,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 
 from allennlp.common import Params
 from allennlp.common.tee_logger import TeeLogger
-from allennlp.data import DataIterator, DatasetReader, Tokenizer, TokenIndexer
+from allennlp.data import Vocabulary,DataIterator, DatasetReader, Tokenizer, TokenIndexer
 try:
     from allennlp.data.dataset import Batch as Dataset
 except ImportError:
@@ -18,6 +18,7 @@ from allennlp.service.predictors import Predictor
 from allennlp.training import Trainer
 
 from readers.reader import FEVERReader
+from modeling.utils.random import SimpleRandom
 
 import argparse
 import logging
@@ -74,7 +75,7 @@ def train_model(params: Union[Params, Dict[str, Any]],
     # Now we begin assembling the required parts for the Trainer.
     ds_params = params.pop('dataset_reader', {})
     read_settings = ds_params.pop('read_settings', {})
-    reader = FEVERReader.from_params(ds_params)    
+    dataset_reader = FEVERReader.from_params(ds_params)    
 
     train_data_path = params.pop('train_data_path')
     logger.info("Reading training data from %s", train_data_path)
@@ -85,38 +86,27 @@ def train_model(params: Union[Params, Dict[str, Any]],
                                      pad_with_nearest=read_settings.pop('pad_with_nearest',
                                                                         0))
 
-    all_datasets = [train_data]
-    datasets_in_vocab = ["train"]
-
     validation_data_path = params.pop('validation_data_path', None)
     if validation_data_path is not None:
         logger.info("Reading validation data from %s", validation_data_path)
         validation_data = dataset_reader.read(validation_data_path,
-                                              max_evidence=max_evidence)
-        all_datasets.append(validation_data)
-        datasets_in_vocab.append("validation")
+                                              include_metadata=True)
     else:
         validation_data = None
 
-    logger.info("Creating a vocabulary using %s data.", ", ".join(datasets_in_vocab))
     vocab_params = params.pop("vocabulary", {})
     dataset = None
     print(dict(vocab_params), 'directory_path' not in vocab_params)
-    if 'directory_path' not in vocab_params:
-        dataset = Dataset([instance for dataset in all_datasets
-                           for instance in dataset.instances])
-    print(dataset)
+    assert('directory_path' in vocab_params)    
     vocab = Vocabulary.from_params(vocab_params,
                                    dataset)
+    print(vocab)
     vocab.save_to_files(os.path.join(serialization_dir, "vocabulary"))
 
     model = Model.from_params(vocab=vocab, params=params.pop('model'))
     iterator = DataIterator.from_params(params.pop("iterator"))
-
-    train_data.index_instances(vocab)
-    if validation_data:
-        validation_data.index_instances(vocab)
-
+    iterator.index_with(vocab)
+    
     trainer_params = params.pop("trainer")
     if cuda_device is not None:
         trainer_params["cuda_device"] = cuda_device
@@ -137,10 +127,6 @@ def train_model(params: Union[Params, Dict[str, Any]],
 
 
 if __name__ == "__main__":
-    LogHelper.setup()
-    LogHelper.get_logger("allennlp.training.trainer")
-    LogHelper.get_logger(__name__)
-
 
     parser = argparse.ArgumentParser()
     parser.add_argument('param_path',

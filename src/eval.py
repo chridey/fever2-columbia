@@ -43,7 +43,7 @@ def eval_model(args) -> Model:
     reader = FEVERReader.from_params(ds_params)
 
     logger.info("Reading training data from %s", args.in_file)
-    data = reader._read(args.in_file, include_metadata=True)
+    data = reader.read(args.in_file, include_metadata=True, start=args.start)
 
     reverse_labels = {j:i for i,j in reader.label_lookup.items()}
     
@@ -60,16 +60,23 @@ def eval_model(args) -> Model:
         if item.fields["premise"] is None or item.fields["premise"].sequence_length() == 0:
             cls = "NOT ENOUGH INFO"
         else:
-            metadata = [i._metadata for i in item.fields['premise'].field_list]
-            try:
-                prediction = model.forward_on_instance(item)
-            except RuntimeError:
-                prediction = dict(predicted_sentences=[], label_probs=[0,0,1])
+            metadata = item.fields['metadata'] #[i._metadata for i in item.fields['premise'].field_list]
+            #try:
+            prediction = model.forward_on_instance(item)
+            #except RuntimeError as e:
+            #    print(e)
+            #    prediction = dict(predicted_sentences=[], label_probs=[0,0,1])
                 
             if 'predicted_sentences' in prediction:
                 predicted_sentences = [list(metadata[i]) for i in prediction['predicted_sentences']]
-                #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])            
-            cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
+                #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])
+
+            if "label_sequence_logits" in prediction:
+                cls = reverse_labels[int(np.argmax(prediction["label_sequence_logits"].sum(axis=-2)))]
+                print([reverse_labels[int(i)] for i in np.argmax(prediction["label_sequence_logits"], axis=-1)])
+                
+            else:
+                cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
             print(cls)
             print(predicted_sentences)
             print(model.get_metrics())
@@ -79,9 +86,12 @@ def eval_model(args) -> Model:
         predicted.append(cls)
 
         if args.log is not None:
-            f.write(json.dumps({"actual":gold,"predicted_label":cls,
-                                "predicted_evidence":predicted_sentences})+"\n")
-
+            if args.score_format:
+                f.write(json.dumps({"actual":gold,"predicted":cls,
+                                    "predicted_sentences":predicted_sentences})+"\n")                
+            else:
+                f.write(json.dumps({"actual":gold,"predicted_label":cls,
+                                    "predicted_evidence":predicted_sentences})+"\n")
     if args.log is not None:
         f.close()
 
@@ -102,6 +112,9 @@ if __name__ == "__main__":
     parser.add_argument('--log', required=False, default=None,  type=str, help='/path/to/saved/db.db')
 
     parser.add_argument("--cuda-device", type=int, default=-1, help='id of GPU to use (if any)')
+
+    parser.add_argument("--score-format", action="store_true", help="use the format required for score.py")
+    parser.add_argument("--start", type=int, default=0)
     
     args = parser.parse_args()
 
