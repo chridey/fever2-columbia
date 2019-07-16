@@ -68,7 +68,7 @@ def eval_model(args) -> Model:
             #    prediction = dict(predicted_sentences=[], label_probs=[0,0,1])
                 
             if 'predicted_sentences' in prediction:
-                predicted_sentences = [list(metadata[i]) for i in prediction['predicted_sentences']]
+                predicted_sentences = [list(metadata['evidence'][i]) for i in prediction['predicted_sentences']]
                 #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])
 
             if "label_sequence_logits" in prediction:

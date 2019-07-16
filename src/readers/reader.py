@@ -204,6 +204,8 @@ class FEVERReader(BaseReader):
                 instance['gold_evidence'] = instance['evidence']
             if self._titles_only:
                 instance['gold_evidence'] = [{(None,None,j[-2],0) for j in i} for i in instance['gold_evidence']]
+            gold = [{(e[2],e[3]) for e in evidence_set} for evidence_set in instance['gold_evidence']]
+                
             if 'predicted_pages' in instance:
                 if self._titles_only:
                     instance['evidence'] = [[i[0],0] for i in instance['predicted_pages']]
@@ -298,7 +300,7 @@ class FEVERReader(BaseReader):
 
                     premise = lines 
 
-                batch_evidence.append((evidence, evidence_map, line_index))
+                batch_evidence.append((evidence, evidence_map, gold, line_index))
                     
                 if evidence is not None:
                     counter.update(evidence)
@@ -339,11 +341,12 @@ class FEVERReader(BaseReader):
                         self._features_cache[file_path] = dict(zip(indices, batch_features))
 
                     for idx,(_,hypothesis,_,label,premise) in enumerate(examples):
-                        evidence, evidence_map, line_index = batch_evidence[idx]
+                        evidence, evidence_map, gold_evidence, line_index = batch_evidence[idx]
                         
                         evidence_metadata = None
                         if include_metadata:
-                            evidence_metadata = [evidence_map[i] for i in premise if len(i)]
+                            evidence_metadata = {'evidence': [evidence_map[i] for i in premise if len(i)],
+                                                 'gold': gold_evidence}
 
                         instance_features = None
                         if self.include_features:
@@ -376,11 +379,12 @@ class FEVERReader(BaseReader):
                 self._features_cache[file_path] = dict(zip(indices, batch_features))
 
             for idx,(_,hypothesis,_,label,premise) in enumerate(examples):
-                evidence, evidence_map, line_index = batch_evidence[idx]
+                evidence, evidence_map, gold_evidence, line_index = batch_evidence[idx]
 
                 evidence_metadata = None
                 if include_metadata:
-                    evidence_metadata = [evidence_map[i] for i in premise if len(i)]
+                    evidence_metadata = {'evidence': [evidence_map[i] for i in premise if len(i)],
+                                         'gold': gold_evidence}
 
                 instance_features = None
                 if self.include_features:
