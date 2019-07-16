@@ -374,7 +374,7 @@ class ESIMRLPtrExtractor(Model):
             self._accuracy(label_logits, label)
 
         fever_reward = self._fever(label_logits, label.squeeze(-1), predictions, evidence,
-                                   indices=True, pad_idx=pad_idx)
+                                   indices=True, pad_idx=pad_idx, metadata=metadata)
 
         if not self._fix_sentence_extraction_params:
             #multiply the reward for the support/refute labels by a constant so that the model selects the correct evidence instead of just trying to predict the not enough info labels
@@ -481,9 +481,9 @@ class ESIMRLPtrExtractor(Model):
                                                          pad_idx=pad_idx)
             else:
                 #TODO: only update classifier if we have correct evidence            
-                evidence_reward = self._fever_evidence_only(label_logits, label.squeeze(-1),
-                                                            predictions, evidence,
-                                                            indices=True, pad_idx=pad_idx)
+                #evidence_reward = self._fever_evidence_only(label_logits, label.squeeze(-1),
+                #                                            predictions, evidence,
+                #                                            indices=True, pad_idx=pad_idx)
                 ###print(evidence_reward)
                 ###print(label)            
                 #mask = evidence_reward > 0
