@@ -310,7 +310,7 @@ class FEVERReader(BaseReader):
 
                 def cache_filename(file_path, line_index):
                     #get the nearest multiple of cache size
-                    base_line_index = line_index // self._cached_features_size * self._cached_features_size
+                    base_line_index = line_index // (self._cached_features_size if self._cached_features_size else 1) * self._cached_features_size
                     return '.'.join([file_path, str(base_line_index), 'npy'])
                                         
                 #read in filename + line_index if it exists
@@ -363,7 +363,7 @@ class FEVERReader(BaseReader):
                     np.save(cache_filename(file_path, line_index),
                             np.array(features))
                 #clear cache if we are at the end of the batch
-                if (line_index + 1) % self._cached_features_size == 0:
+                if self._cached_features_size and ((line_index + 1) % self._cached_features_size == 0):
                     self._features_cache[file_path] = {}                                            
 
         #handle the leftovers
