@@ -65,8 +65,8 @@ class FeverScore(Metric):
         self.correct_count += total_correct
 
         fever_recall = torch.autograd.Variable(torch.FloatTensor(fever_recall))
-        if torch.cuda.is_available() and predictions.is_cuda:
-            idx = predictions.get_device()            
+        if torch.cuda.is_available() and evidence.is_cuda:
+            idx = evidence.get_device()            
             fever_recall = fever_recall.cuda(idx)                        
         return fever_recall
         
