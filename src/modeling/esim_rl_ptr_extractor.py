@@ -237,7 +237,7 @@ class ESIMRLPtrExtractor(Model):
                                                             beam_size=self._beam_size)
             #print(output['states'].shape)
             #print(idxs)
-            states.append(output['states'])
+            states.append(output.get('states', []))
             
             valid_idx = []
             try:
