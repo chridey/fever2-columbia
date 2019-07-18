@@ -337,7 +337,7 @@ class FEVERReader(BaseReader):
                     batch_features = None
                     if self.include_features and batch_evidence[0][-1] not in self._features_cache[file_path]:
                         batch_features = self.bert_feature_extractor.forward(examples).cpu().numpy().tolist()
-                        indices = range(line_index, line_index+self.batch_size)
+                        indices = range(line_index-len(examples)+1, line_index+1)
                         self._features_cache[file_path] = dict(zip(indices, batch_features))
 
                     for idx,(_,hypothesis,_,label,premise) in enumerate(examples):
@@ -355,6 +355,8 @@ class FEVERReader(BaseReader):
                         yield self.text_to_instance(premise, hypothesis, label, evidence,
                                                 instance_features, evidence_metadata)
 
+                    if self._cached_features_size == 0:
+                        self._features_cache[file_path] = {}                                            
                     examples = []
                     batch_evidence = []
 
@@ -366,7 +368,7 @@ class FEVERReader(BaseReader):
                     np.save(cache_filename(file_path, line_index),
                             np.array(features))
                 #clear cache if we are at the end of the batch
-                if self._cached_features_size and ((line_index + 1) % self._cached_features_size == 0):
+                if self._cached_features_size != 0 and ((line_index + 1) % self._cached_features_size == 0):
                     self._features_cache[file_path] = {}                                            
 
         #handle the leftovers
