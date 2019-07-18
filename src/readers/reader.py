@@ -104,6 +104,7 @@ class FEVERReader(BaseReader):
         if not self._prepend_title:
             return line
         return ' '.join(doc.split('_')) + ' : ' + line
+
         
     def get_doc_line(self,doc,line):
         if self.db is None:
@@ -125,6 +126,29 @@ class FEVERReader(BaseReader):
             
         non_empty_lines = [line.split("\t")[1] for line in lines.split("\n") if len(line.split("\t"))>1 and len(line.split("\t")[1].strip())]
         return self.prepend_title(doc, non_empty_lines[np.random.choice(len(non_empty_lines), 1)])
+
+
+    def get_doc_line_for_date_claim(self,doc,line):
+        if self.db is None:
+            return '{}_{}'.format(doc,line) #TODO
+        
+        lines = self.db.get_doc_lines(doc)
+        if line > -1:
+            try:
+                if lines is not None:
+                    return lines.split("\n")[line].split("\t")[1]
+                doc = doc.replace(' ', '_').replace('__', '_')
+                lines = self.db.get_doc_lines(doc)
+                return lines.split("\n")[line].split("\t")[1]
+            except IndexError:
+                print('problem with ', doc, line)
+            except AttributeError:
+                print('problem with ', doc, line)
+                return ''
+            
+        non_empty_lines = [line.split("\t")[1] for line in lines.split("\n") if len(line.split("\t"))>1 and len(line.split("\t")[1].strip())]
+        return non_empty_lines[np.random.choice(len(non_empty_lines), 1)]
+
 
     def get_top_sentences_from_pages(self, instance):
         claim = list(map(str, self.tokenizer(instance['claim'])))

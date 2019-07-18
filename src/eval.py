@@ -16,6 +16,7 @@ except ImportError:
 from allennlp.models import Model, archive_model, load_archive
 from allennlp.service.predictors import Predictor
 from allennlp.training import Trainer
+from handlenumericaldateclaims import isClaimEligibleForDateCalculation,getDateClaimLabel
 
 from readers.reader import FEVERReader
 
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def eval_model(args) -> Model:
     archive = load_archive(args.archive_file, cuda_device=args.cuda_device)
+    open_ie_predictor = Predictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp/models/openie-model.2018-08-20.tar.gz")
 
     config = archive.config
     ds_params = config["dataset_reader"]
@@ -69,7 +71,13 @@ def eval_model(args) -> Model:
             if 'predicted_sentences' in prediction:
                 predicted_sentences = [list(metadata[i]) for i in prediction['predicted_sentences']]
                 #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])            
-            cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
+            
+
+            reformulated_claim, flag = isClaimEligibleForDateCalculation(item.fields["claim"])
+            if flag:
+                cls = getDateClaimLabel(item.fields["claim"],predicted_sentences,reader,open_ie_predictor)
+            else:
+                cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
             print(cls)
             print(predicted_sentences)
             print(model.get_metrics())
