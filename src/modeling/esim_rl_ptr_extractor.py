@@ -21,7 +21,7 @@ except ImportError:
 from allennlp.training.metrics import CategoricalAccuracy, F1Measure
 
 from .metrics import FeverScore
-from .utils import *
+from .utils.utils import *
 
 from .rl_ptr_extractor import ActorCritic
 from .esim import ESIM
@@ -113,7 +113,9 @@ class ESIMRLPtrExtractor(Model):
                  fix_entailment_params=False,
                  fix_sentence_extraction_params=False,
                  nei_label=0,
-                 train_gold_evidence=False) -> None:
+                 train_gold_evidence=False,
+                 use_decoder_states=False,
+                 beam_size=5) -> None:
 
         super(ESIMRLPtrExtractor, self).__init__(vocab, regularizer)
 
@@ -144,6 +146,8 @@ class ESIMRLPtrExtractor(Model):
         self._nei_label = nei_label
         #print(self._fix_entailment_params, self._fix_sentence_extraction_params)
         self._train_gold_evidence = train_gold_evidence
+        self._use_decoder_states = use_decoder_states
+        self._beam_size = beam_size
         
     def forward(self,  # type: ignore
                 premise: Dict[str, torch.LongTensor],
@@ -154,7 +158,8 @@ class ESIMRLPtrExtractor(Model):
                 max_select=5,
                 gamma=0.95,
                 teacher_forcing_ratio=1,
-                features=None) -> Dict[str, torch.Tensor]:
+                features=None,
+                metadata=None) -> Dict[str, torch.Tensor]:
 
         # pylint: disable=arguments-differ
         """
@@ -194,7 +199,7 @@ class ESIMRLPtrExtractor(Model):
                                                          hypothesis_mask,
                                                          wrap_output=True,
                                                          features=features)
-        
+
         batch_size, num_evidence, max_premise_length = premise_mask.shape
         #print(premise_mask.shape)
         aggregated_input = aggregated_input.view(batch_size, num_evidence, -1)
@@ -208,7 +213,7 @@ class ESIMRLPtrExtractor(Model):
         indices = []
         probs = []
         baselines = []
-
+        states = []
         selected_evidence_lengths = []
         for i in range(evidence.size(0)):
             #print(label[i].data[0], evidence[i])
@@ -224,18 +229,22 @@ class ESIMRLPtrExtractor(Model):
             if random.random() > teacher_forcing_ratio and curr_label != self._nei_label and float(evidence[i].ne(pad_idx).sum()) > 0:
                 gold_evidence = evidence[i]
             #print(gold_evidence)
-            (idxs, prob), baseline = self._ptr_extract_summ(aggregated_input[i],
+
+            output = self._ptr_extract_summ(aggregated_input[i],
                                                             max_select,
                                                             evidence_mask[i],
-                                                            gold_evidence)
+                                                            gold_evidence,
+                                                            beam_size=self._beam_size)
+            #print(output['states'].shape)
             #print(idxs)
+            states.append(output.get('states', []))
             
             valid_idx = []
             try:
                 curr_evidence_len = evidence_len[i].data[0]
             except IndexError:
                 curr_evidence_len = evidence_len[i].item()
-            for idx in idxs[:min(max_select, curr_evidence_len)]:
+            for idx in output['idxs'][:min(max_select, curr_evidence_len)]:
                 try:
                     curr_idx = idx.view(-1).data[0]
                 except IndexError:
@@ -253,9 +262,10 @@ class ESIMRLPtrExtractor(Model):
             selected_evidence_lengths.append(len(valid_idx))
             #print(selected_evidence_lengths[-1])
             indices.append(valid_idx)
-            if baseline is not None:
-                baselines.append(baseline[:len(valid_idx)])
-            probs.append(prob[:len(valid_idx)])
+            if 'scores' in output:
+                baselines.append(output['scores'][:len(valid_idx)])
+            if 'probs' in output:
+                probs.append(output['probs'][:len(valid_idx)])
 
             valid_indices.append(torch.LongTensor(valid_idx + \
                                              [-1]*(max_select-len(valid_idx))))
@@ -292,26 +302,45 @@ class ESIMRLPtrExtractor(Model):
             l = l.cuda(idx)
             predictions = predictions.cuda(idx)
             
-        for key in premise:
-            selected_premise[key] = torch.gather(premise[key], dim=1, index=index)
+        if self._use_decoder_states:
+            states = torch.cat(states, dim=0)
+            label_sequence = make_label_sequence(predictions, evidence, label,
+                                                 pad_idx=pad_idx,
+                                                 nei_label=self._nei_label)
+            #print(states.shape)
+            batch_size, max_length, _ = states.shape
+            label_logits = self._entailment_esim(features=states.view(batch_size*max_length,1,-1))
+            if 'loss' not in output_dict:
+                output_dict['loss'] = 0
+            output_dict['loss'] += sequence_loss(label_logits.view(batch_size,
+                                                                   max_length, -1),
+                                                 label_sequence, self._evidence_loss,
+                                                 pad_idx=pad_idx)
+            output_dict['label_sequence_logits'] = label_logits.view(batch_size,max_length,-1)
+            label_logits = output_dict['label_sequence_logits'][:,-1,:]
+        else:
+            for key in premise:
+                selected_premise[key] = torch.gather(premise[key], dim=1, index=index)
+
+            selected_mask = torch.gather(premise_mask, dim=1,
+                                         index=index)
+
+            selected_mask = selected_mask * l.unsqueeze(-1)
             
-        selected_mask = torch.gather(premise_mask, dim=1,
-                                     index=index)
+            selected_features = None
+            if features is not None:
+                index=predictions.unsqueeze(2).expand(batch_size,
+                                                      max_select,
+                                                      features.size(-1))
+                index = index * l.long().unsqueeze(-1)
+                selected_features = torch.gather(features, dim=1,
+                                                 index=index)
 
-        selected_mask = selected_mask * l.unsqueeze(-1)
-
-        selected_features = None
-        if features is not None:
-            index=predictions.unsqueeze(2).expand(batch_size,
-                                                  max_select,
-                                                  features.size(-1))
-            index = index * l.long().unsqueeze(-1)
-            selected_features = torch.gather(features, dim=1,
-                                             index=index)
-        
-        label_logits = self._entailment_esim(selected_premise, hypothesis,
-                                             premise_mask=selected_mask,
-                                             features=selected_features)
+            #UNDO!!!!!
+            selected_features = selected_features[:,:,:200]
+            label_logits = self._entailment_esim(selected_premise, hypothesis,
+                                                premise_mask=selected_mask,
+                                                features=selected_features)
         label_probs = torch.nn.functional.softmax(label_logits, dim=-1)
 
         #print(label_probs[0])
@@ -347,7 +376,7 @@ class ESIMRLPtrExtractor(Model):
             self._accuracy(label_logits, label)
 
         fever_reward = self._fever(label_logits, label.squeeze(-1), predictions, evidence,
-                                   indices=True, pad_idx=pad_idx)
+                                   indices=True, pad_idx=pad_idx, metadata=metadata)
 
         if not self._fix_sentence_extraction_params:
             #multiply the reward for the support/refute labels by a constant so that the model selects the correct evidence instead of just trying to predict the not enough info labels
@@ -370,7 +399,7 @@ class ESIMRLPtrExtractor(Model):
                 reward = reward.cuda(idx)                        
 
             #print(reward)
-            if baseline is not None:
+            if len(baselines):
                 indices = list(itertools.chain(*indices))
                 probs = list(itertools.chain(*probs))
                 baselines = list(itertools.chain(*baselines))
@@ -417,44 +446,66 @@ class ESIMRLPtrExtractor(Model):
             #output_dict['reward'] = avg_reward / evidence.size(0)
 
         if self.training and self._train_gold_evidence:
-            if len(evidence.shape) > 2:
-                evidence = evidence.squeeze(-1)
-            #print(evidence_len.long().data.cpu().numpy().tolist())
-            _, scores = self._ptr_extract_summ(aggregated_input,
-                                               None,
-                                               None,
-                                               evidence,
-                                               evidence_len.long().data.cpu().numpy().tolist())
-            loss = sequence_loss(scores[:,:-1,:], evidence, self._evidence_loss, pad_idx=pad_idx)
+            
             if 'loss' not in output_dict:
                 output_dict['loss'] = 0
-            output_dict['loss'] += self.lambda_weight * loss
-            
-        if not self._fix_entailment_params:
-            #TODO: only update classifier if we have correct evidence            
-            evidence_reward = self._fever_evidence_only(label_logits, label.squeeze(-1),
-                                                        predictions, evidence,
-                                                        indices=True, pad_idx=pad_idx)
-            ###print(evidence_reward)
-            ###print(label)            
-            #mask = evidence_reward > 0
-            #target = mask * label.byte() + mask.eq(0) * self._nei_label
-            
-            mask = fever_reward != 2**7
-            target = label.view(-1).masked_select(mask)
-            
-            ###print(target)
-            
-            mask = fever_reward != 2**7
-            logit = label_logits.masked_select(
-                mask.unsqueeze(1).expand_as(label_logits)
-            ).contiguous().view(-1, label_logits.size(-1))
+            if evidence.sum() != -1*torch.numel(evidence):                
+                if len(evidence.shape) > 2:
+                    evidence = evidence.squeeze(-1)
+                #print(evidence_len.long().data.cpu().numpy().tolist())
+                #print(evidence.shape, evidence_len.shape)
+                #print(evidence, evidence_len)
+                output = self._ptr_extract_summ(aggregated_input,
+                                                   None,
+                                                   None,
+                                                   evidence,
+                                                   evidence_len.long().data.cpu().numpy().tolist())
+                #print(output['states'].shape)
 
-            loss = self._loss(logit, target.long()) #label_logits, label.long().view(-1))
-            if 'loss' in output_dict:
-                output_dict["loss"] += self.lambda_weight * loss
+                loss = sequence_loss(output['scores'][:,:-1,:],
+                                     evidence, self._evidence_loss, pad_idx=pad_idx)
+                
+                output_dict['loss'] += self.lambda_weight * loss
+                
+        if not self._fix_entailment_params:
+            if self._use_decoder_states:
+                if self.training:
+                    label_sequence = make_label_sequence(evidence, evidence, label,
+                                                         pad_idx=pad_idx, nei_label=self._nei_label)
+                    batch_size, max_length, _ = output['states'].shape
+                    label_logits = self._entailment_esim(features=output['states'][:,1:,:].contiguous().view(batch_size*(max_length-1),1,-1))
+                    if 'loss' not in output_dict:
+                        output_dict['loss'] = 0
+                    #print(label_logits.shape, label_sequence.shape)
+                    output_dict['loss'] += sequence_loss(label_logits.view(batch_size,
+                                                                           max_length-1, -1),
+                                                         label_sequence, self._evidence_loss,
+                                                         pad_idx=pad_idx)
             else:
-                output_dict["loss"] = self.lambda_weight * loss
+                #TODO: only update classifier if we have correct evidence            
+                #evidence_reward = self._fever_evidence_only(label_logits, label.squeeze(-1),
+                #                                            predictions, evidence,
+                #                                            indices=True, pad_idx=pad_idx)
+                ###print(evidence_reward)
+                ###print(label)            
+                #mask = evidence_reward > 0
+                #target = mask * label.byte() + mask.eq(0) * self._nei_label
+
+                mask = fever_reward != 2**7
+                target = label.view(-1).masked_select(mask)
+
+                ###print(target)
+
+                mask = fever_reward != 2**7
+                logit = label_logits.masked_select(
+                    mask.unsqueeze(1).expand_as(label_logits)
+                ).contiguous().view(-1, label_logits.size(-1))
+
+                loss = self._loss(logit, target.long()) #label_logits, label.long().view(-1))
+                if 'loss' in output_dict:
+                    output_dict["loss"] += self.lambda_weight * loss
+                else:
+                    output_dict["loss"] = self.lambda_weight * loss
 
         return output_dict
 
@@ -531,7 +582,9 @@ class ESIMRLPtrExtractor(Model):
         ei_reward_weight = params.pop("ei_reward_weight", 1)
         nei_label = params.pop("nei_label", 0)
         train_gold_evidence = params.pop("train_gold_evidence", False)
-
+        use_decoder_states = params.pop("use_decoder_states", False)
+        beam_size = params.pop("beam_size", 5)
+        
         fix_sentence_extraction_params = params.pop("fix_sentence_extraction_params", False)
         
         params.assert_empty(cls.__name__)
@@ -546,5 +599,7 @@ class ESIMRLPtrExtractor(Model):
                    fix_entailment_params=fix_entailment_params,
                    fix_sentence_extraction_params=fix_sentence_extraction_params or fix_ptr_extract_summ_params and fix_sentence_selection_esim_params,
                    nei_label=nei_label,
-                   train_gold_evidence=train_gold_evidence)
+                   train_gold_evidence=train_gold_evidence,
+                   use_decoder_states=use_decoder_states,
+                   beam_size=beam_size)
 

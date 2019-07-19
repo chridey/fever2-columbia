@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import csv
 import os
 import logging
@@ -55,7 +56,28 @@ class BertForMultipleSequenceClassification(PreTrainedBertModel):
         self.pooling = pooling
 
         self.return_reps = return_reps
-        
+
+    def load_weights(self, serialization_dir, cuda_device='cpu'):
+        weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
+        if cuda_device == "cpu":
+            state_dict = torch.load(weights_path, map_location=cuda_device)
+        else:
+            state_dict = torch.load(weights_path)
+            
+        weight_groups = {i.split('.')[0] for i in state_dict}
+        for group in weight_groups:
+            if getattr(self, group) is not None:
+                try:
+                    getattr(self, group).load_state_dict(collections.OrderedDict((i.replace(group + '.', ''),
+                                                                             state_dict[i]) for i in state_dict if i.startswith(group + '.')))
+                except Exception:
+                    print('WARNING: could not load weight group {} from {}'.format(group,
+                                                                                   serialization_dir))
+                getattr(self, group).to(cuda_device)                                     
+
+        #self.model.load_state_dict(state_dict)        
+        #self.model = self.model.to(cuda_device)        
+
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
 
         batch_size, num_sequences, max_length = input_ids.shape
@@ -144,7 +166,8 @@ class BertFeatureExtractor:
                  do_lower_case=True,
                  max_seq_length=128,
                  batch_size=32,
-                 cuda_device=-1):
+                 cuda_device=-1,
+                 reorder=False):
         
         #initialize tokenizer and models here
         self.tokenizer = BertTokenizer.from_pretrained(bert_model_name, do_lower_case=do_lower_case)
@@ -166,12 +189,7 @@ class BertFeatureExtractor:
             classifier_config = json.load(f)
         # Instantiate model.
         self.model = BertForMultipleSequenceClassification(config, **classifier_config)
-        weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
-        if cuda_device == "cpu":
-            state_dict = torch.load(weights_path, map_location=cuda_device)
-        else:
-            state_dict = torch.load(weights_path)
-        self.model.load_state_dict(state_dict)
+        self.model.load_weights(serialization_dir, cuda_device)
         #self.model = BertForMultipleSequenceClassification.from_pretrained(pretrained_file_name)
         
         self.label_map = label_map
@@ -179,7 +197,8 @@ class BertFeatureExtractor:
 
         self.batch_size = batch_size
         self.verbose = False
-                        
+        self.reorder = reorder
+        
     def convert_examples_to_features(self, examples, single_sentence=False):
         """Loads a data file into a list of `InputBatch`s."""
 
@@ -268,15 +287,19 @@ class BertFeatureExtractor:
 
             for tokens_a, tokens_b in zip(tokens_a_list, tokens_b_list):
 
+                if self.reorder:
+                    tokens_a, tokens_b = tokens_b, tokens_a
+                    
                 tokens = []
                 segment_ids = []
                 tokens.append("[CLS]")
                 segment_ids.append(0)
-                for token in tokens_a:
-                    tokens.append(token)
+                if tokens_a:
+                    for token in tokens_a:
+                        tokens.append(token)
+                        segment_ids.append(0)
+                    tokens.append("[SEP]")
                     segment_ids.append(0)
-                tokens.append("[SEP]")
-                segment_ids.append(0)
 
                 if tokens_b:
                     for token in tokens_b:
@@ -364,7 +387,17 @@ class BertFeatureExtractor:
     def forward_on_single(self, id, claim, sentences, label=None):
         input_example = InputExample(id, claim, label=label, text_list=sentences)
         return list(self.convert_examples_to_reps([input_example]))[0][0]
-                
+
+    def forward(self, examples):
+        input_examples = []
+        for example in examples:
+            input_examples.append(InputExample(*example))
+            
+        ret = []
+        for reps in self.convert_examples_to_reps(input_examples):
+            ret.append(reps)
+        return torch.cat(ret, dim=0)
+                    
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
     """Truncates a sequence pair in place to the maximum length."""
 

@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
 
-from .utils import *
+from .utils.utils import *
 
 INI = 1e-2
 
@@ -58,11 +58,10 @@ class LSTMPointerNet(nn.Module):
                 hop_feat, query, self._hop_v, self._hop_wq, mem_sizes)
         output = LSTMPointerNet.attention_score(
             attn_feat, query, self._attn_v, self._attn_wq)
-        return output  # unormalized extraction logit
+        return dict(scores=output,  # unormalized extraction logit
+                    states=query)
 
-    def extract(self, attn_mem, mem_sizes, k, mask=None):
-
-        beam_size = 5
+    def extract(self, attn_mem, mem_sizes, k, mask=None, beam_size = 5):
         if attn_mem.size(0) > 1:
             beam_size = 1
         elif mem_sizes is not None and mem_sizes[0] < beam_size:
@@ -89,12 +88,13 @@ class LSTMPointerNet(nn.Module):
         
         extracts = []
         beam_states = []
+        hidden_states = []
         if beam_size > 1:
             #print(mask.shape)
             mask = mask.unsqueeze(0).expand(beam_size, batch_size, mask.size(-1)).contiguous().view(beam_size*batch_size, -1)
             lstm_in = lstm_in.expand(beam_size, batch_size, lstm_in.size(-1)).contiguous().view(1, beam_size*batch_size, -1)
             lstm_states = [i.expand(beam_size, batch_size, i.size(-1)).contiguous().view(1, beam_size*batch_size, -1) for i in lstm_states]
-                                     
+
         for state in range(k):
             #print(lstm_in.shape)
             output, lstm_states = self._lstm(lstm_in, lstm_states)
@@ -142,10 +142,13 @@ class LSTMPointerNet(nn.Module):
                 #print(extracts)
                 extracts = torch.autograd.Variable(torch.LongTensor(extracts).transpose(0,1))
                 #print(beam_states, extracts)
+
+                #TODO: do hidden states for beam search
             else:
                 ext = score.max(dim=1)[1] #.item()
                 extracts.append(ext)
-
+                hidden_states.append(query.transpose(0,1))
+                
             ##print([i.shape for i in c])
             #lstm_states = (h, c)
 
@@ -173,8 +176,11 @@ class LSTMPointerNet(nn.Module):
             extracts = extracts.cuda(idx)
 
         #print(extracts)
-            
-        return extracts
+
+        if len(hidden_states):
+            hidden_states = torch.cat(hidden_states, dim=1)
+        
+        return dict(idxs=extracts, states=hidden_states)
 
     def _prepare(self, attn_mem):
         attn_feat = torch.matmul(attn_mem, self._attn_wm.unsqueeze(0))

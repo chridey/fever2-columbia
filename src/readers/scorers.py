@@ -130,7 +130,7 @@ class GloveScorer(Scorer):
             embedding_list2.append(self.embed(tokens))
 
         return cosine_similarity(np.array(embedding_list1), np.array(embedding_list2), True)
-            
+        
 class JaccardScorer(Scorer):
     name = 'Jaccard'
     
@@ -241,6 +241,9 @@ class SimpleSentenceRanker:
              query,
              sentences):
 
+        if not len(sentences):
+            return np.array([])
+        
         scores = self.scorer.batch_score([query], sentences, weight=True)
         return scores[0]
 

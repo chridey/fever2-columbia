@@ -1,6 +1,7 @@
 import sqlite3
 import unicodedata
 import functools
+import itertools
 
 import tqdm
 
@@ -8,6 +9,13 @@ from drqa.retriever import DocDB, utils
 
 def normalize(page):
     return unicodedata.normalize('NFD',page)
+
+def process_markup(s):
+    s = ' '.join(s)
+    s = s.replace('-LRB-', '(')
+    s = s.replace('-RRB-', ')')
+    s = s.replace('-COLON-', ':')
+    return s
 
 def get_nonempty_doc_lines(lines):
     if lines is None:
@@ -59,17 +67,30 @@ class BatchedDB(DocDB):
 
         return get_nonempty_doc_lines(super().get_doc_lines(doc_id))[:2]
     
-    def preprocess(self, data, keep_only_first_two_lines=False):
+    def get_batch_doc_lines(self, data, keep_lines=None,
+                            keys=('predicted_pages',), ignore=None):
         #first read the data and get all the relevant wikipedia articles
         conn = sqlite3.connect(self.db)
         c = conn.cursor()
         to_lookup = set()
         
         for js in tqdm.tqdm(data):
-            for j in js['predicted_pages']:
-                page = normalize(j[0]) 
-                if page not in self.cache:
-                    to_lookup.add(page)
+            for key in keys:
+                evidence = js[key]
+                if key == 'predicted_pages':
+                    index = 0
+                elif key == 'evidence':
+                    index = 2
+                    evidence = itertools.chain(*evidence)
+                else:
+                    raise NotImplementedError
+                
+                for j in evidence:
+                    if j[index] is None:
+                        continue
+                    page = normalize(j[index]) 
+                    if page not in self.cache and (ignore is None or page not in ignore):
+                        to_lookup.add(page)
 
         print(len(to_lookup))
         self.cache = {}
@@ -81,8 +102,13 @@ class BatchedDB(DocDB):
             c.execute('SELECT id,lines from documents where id in (%s)' % ','.join('?'*len(lookup)), lookup)
             for row in tqdm.tqdm(c):
                 id,lines = row
-                if keep_only_first_two_lines:
-                    lines = get_nonempty_doc_lines(lines)[:2]
+                if keep_lines is not None:
+                    lines = get_nonempty_doc_lines(lines)
+                    lines = [lines[i] for i in keep_lines if i<len(lines)]
                         
-                self.cache[normalize(id)] = lines
+                yield normalize(id), lines
         
+    def preprocess(self, data, keep_lines=None,
+                    keys=('predicted_pages',), ignore=None):
+        for id,lines in self.get_batch_doc_lines(data, keep_lines, keys, ignore):
+            self.cache[id] = lines

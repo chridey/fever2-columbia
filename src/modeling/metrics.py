@@ -1,73 +1,77 @@
 from typing import Optional
 
 from overrides import overrides
+
+import numpy as np
 import torch
 
 from allennlp.training.metrics.metric import Metric
 
 class FeverScore(Metric):
-    def __init__(self, nei_label=0, correct_evidence_only=False) -> None:
+    def __init__(self, nei_label=0, max_select=5) -> None:
         self.correct_count = 0.
         self.total_count = 0.
         self.correct_evidence_count = 0.
         self.total_evidence_count = 0.
         self.nei_label = nei_label
-        self.correct_evidence_only = correct_evidence_only
+        self.max_select = max_select
         
     def __call__(self,
                  predictions: torch.Tensor,
                  gold_labels: torch.Tensor,
                  evidence_predictions: torch.Tensor,
-                 evidence_labels: torch.Tensor,
+                 evidence: torch.Tensor,
                  indices=False,
+                 metadata=None,
                  pad_idx=-1):
 
-        if self.correct_evidence_only:
-            correct = 1
-        else:
-            top_k = predictions.max(-1)[1].unsqueeze(-1)
-            correct = top_k.eq(gold_labels.long().unsqueeze(-1)).view(-1)
+        top_k = predictions.max(-1)[1].unsqueeze(-1)
+        correct = top_k.eq(gold_labels.long().unsqueeze(-1)).view(-1)
+        evidence_predictions = evidence_predictions.data.cpu().numpy()
 
-        #print(predictions, gold_labels, top_k, correct)
-        
-        if indices:
-            correct_evidence = []
-            for i in range(evidence_predictions.size(0)):
-                if int(evidence_labels[i].sum()) != pad_idx * 5:
-                    #print(evidence_labels[i])
-                    #print(evidence_labels[i].ne(pad_idx))
-                    #print(evidence_labels[i].masked_select(evidence_labels[i].ne(pad_idx)))
-                    e = evidence_labels[i].masked_select(evidence_labels[i].ne(pad_idx)).data.cpu().numpy()
-                    p = evidence_predictions[i].data.cpu().numpy()
-                    #print(e)
-                    #print(p)
-                    correct_evidence.append([set(e).issubset(p)])
-                else:
-                    correct_evidence.append([False])
-            correct_evidence = torch.autograd.Variable(torch.FloatTensor(correct_evidence))
-            if torch.cuda.is_available() and evidence_predictions.is_cuda:
-                idx = evidence_predictions.get_device()
-                correct_evidence = correct_evidence.cuda(idx)                
-        else:
-            correct_evidence = evidence_labels.float() * (evidence_predictions[:,:,1] > evidence_predictions[:,:,0]).float()
-            #TODO: this is overcounting, includes the ones where evidence is 0
-            correct_evidence = ((correct_evidence.sum(dim=1) >= evidence_labels.sum(dim=1).float()) & (evidence_labels.sum(dim=1) > 0)).view(-1,1)
-        #print(evidence_predictions, evidence_labels, correct_evidence)
-        #TODO: if more than one evidence sentence is required, this is an overestimate for non-inidices and an under for indices
+        total_evidence_count = 0
+        correct_evidence_count = 0
+        total_correct = 0
+        fever_recall = []
+        for idx,(is_correct, evidence_prediction) in enumerate(zip(correct,
+                                                                evidence_predictions)):
+            #print(predictions[idx], gold_labels[idx].item(), is_correct.item(),
+            #      evidence_prediction, metadata[idx])
+            try:
+                gold_label = gold_labels[idx]
+            except IndexError:
+                gold_label = gold_labels.item()
+            if gold_label != self.nei_label:
+                total_evidence_count += 1
+                #TODO: subset evidence
+                evidence_metadata = {tuple(metadata[idx]['evidence'][i]) for i in evidence_prediction[:self.max_select] if i < len(metadata[idx]['evidence'])}
+                found_evidence = False
+                for evidence_set in metadata[idx]['gold']:
+                    #print(evidence_set, evidence_set.issubset(evidence_metadata))
+                    if evidence_set.issubset(evidence_metadata):
+                        found_evidence = True
+                        break                
+                correct_evidence_count += found_evidence
+                
+            if is_correct and (gold_label == self.nei_label or found_evidence):
+                total_correct += 1
 
-        correct_evidence_count = float(((correct_evidence.sum(dim=1) > 0) & (gold_labels != self.nei_label)).sum())
-        total_evidence_count = float((gold_labels != self.nei_label).sum())
+                fever_recall.append(1)
+            else:
+                fever_recall.append(0)
+
+            #print(total_evidence_count, correct_evidence_count, total_correct)
+                
         self.total_evidence_count += total_evidence_count
         self.correct_evidence_count += correct_evidence_count
         
-        #print(correct_evidence_count, total_evidence_count)
-        
-        fever_recall = ((correct_evidence.sum(dim=1) > 0) | (gold_labels == self.nei_label)) & correct
-        total_count = float(predictions.size(0))
-        correct_count = float(fever_recall.sum())
-        self.total_count += total_count
-        self.correct_count += correct_count
+        self.total_count += (idx+1)#int(gold_labels.size(0))
+        self.correct_count += total_correct
 
+        fever_recall = torch.autograd.Variable(torch.FloatTensor(fever_recall))
+        if torch.cuda.is_available() and evidence.is_cuda:
+            idx = evidence.get_device()            
+            fever_recall = fever_recall.cuda(idx)                        
         return fever_recall
         
     def get_metric(self, reset: bool = False):

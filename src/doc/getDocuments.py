@@ -11,8 +11,31 @@ import ast
 import unicodedata
 from allennlp.service.predictors import Predictor
 import time
+import logging
 
+logger = logging.getLogger(__name__)
 
+class GoogleConfig:
+    def __init__(self, api_key=None, cse_id=None, site='wikipedia', num=5, max_docs=2):
+        if 'API_KEY' in os.environ:
+            api_key = os.environ['API_KEY']
+        if 'SEARCH_ID' in os.environ:
+            cse_id = os.environ['SEARCH_ID']
+        assert(api_key is not None and cse_id is not None)
+        
+        self.api_key = api_key
+        self.cse_id = cse_id
+        self.site = site
+        self.num = num
+        self.max_docs = max_docs
+
+    def __str__(self):
+        return 'GoogleConfig(api_key={}, cse_id={}, site={}, num={}, max_docs={}'.format(self.api_key,
+                                                                                         self.cse_id,
+                                                                                         self.site,
+                                                                                         self.num,
+                                                                                         self.max_docs)
+        
 def google_search(search_term, api_key, cse_id, **kwargs):
     service = build("customsearch", "v1", developerKey=api_key)
     res = service.cse().list(q=search_term, cx=cse_id, **kwargs).execute()
@@ -21,21 +44,17 @@ def google_search(search_term, api_key, cse_id, **kwargs):
     else:
         return []
 
-
-
-
-def getDocumentsForClaimFromGoogle(claim,api_key, cse_id):
-    if 'API_KEY' in os.environ:
-        api_key = os.environ['API_KEY']
-    if 'SEARCH_ID' in os.environ:
-        cse_id = os.environ['SEARCH_ID']
-        print(api_key,cse_id)
-        results = google_search('wikipedia '+claim, api_key, cse_id, num=5)
-        res = []
-        c = 0
+def getDocumentsForClaimFromGoogle(claim, google_config):    
+    results = google_search(google_config.site+' '+claim, google_config.api_key,
+                            google_config.cse_id, num=google_config.num)
+    logger.info(google_config)
+    res = []
+    c = 0
     for result in results:
-        if 'https://en.wikipedia.org/wiki/' in result['formattedUrl'] and c<2:
-            b = result['formattedUrl'].replace('https://en.wikipedia.org/wiki/','')
+        logger.info(result['formattedUrl'])
+        #if 'https://en.wikipedia.org/wiki/' in result['formattedUrl'] and c<google_config.max_docs:
+        if 'en.wikipedia.org' in result['formattedUrl'] and c<google_config.max_docs:
+            b = result['formattedUrl'].split('/')[-1].replace(' ', '')#replace('https://en.wikipedia.org/wiki/','')
             c = c+1
             b = b.replace('(','-LRB-')
             b = b.replace(')','-RRB-')
@@ -47,7 +66,31 @@ def getDocumentsForClaimFromGoogle(claim,api_key, cse_id):
             res.append(b)
     return res
 
+def getDocumentsFromConstituentParse(claim, predictor):
+    results = predictor.predict(sentence=claim)
 
+    nodes = [results['hierplane_tree']['root']]
+    candidates = []
+    while len(nodes):
+        node = nodes.pop(0)
+        if node['nodeType'] == 'NP':
+            #print(node)
+            candidates.append(node['word'])
+        if 'children' in node:
+            nodes.extend(node['children'])    
+
+    entities = []
+    for candidate in candidates:
+        entity = wikipedia.search(candidate,1)
+        if len(entity)>0:
+            x = entity[0]
+            x = x.replace(' ','_')
+            x = x.replace('(','-LRB-')
+            x = x.replace(')','-RRB-')
+            x = x.replace(':','-COLON-')
+            entities.append(x)
+    return entities
+            
 def getDocumentsFromDepParse(claim):
     claim = nltk.word_tokenize(claim)
     pos = nltk.pos_tag(claim)
@@ -163,10 +206,15 @@ def getDocumentsForNer(claim,predictor):
     rec = list(set(rec))
     return rec
 
+def getDocsFromTFIDF(claim, ranker, k=10):
+    doc_names, doc_scores = ranker.closest_docs(claim, k)
 
-def getDocsForClaim(claim,api_key,cse_id,predictor):
+    pages = list(zip(doc_names, doc_scores))
+    return pages
+
+def getDocsForClaim(claim,google_config,predictor,ranker):
     try:
-        docs_google = getDocumentsForClaimFromGoogle(claim,api_key,cse_id)
+        docs_google = getDocumentsForClaimFromGoogle(claim,google_config)
     except Exception:
         docs_google = []
     try:
@@ -177,6 +225,10 @@ def getDocsForClaim(claim,api_key,cse_id,predictor):
         docs_dep_parse = getDocumentsFromDepParse(claim)
     except Exception:
         docs_dep_parse = []
+    try:
+        docs_tfidf = getDocsFromTFIDF(claim, ranker)
+    except Exception:
+        docs_tfidf = []
     docs = []
     for elem in docs_google:
             if 'disambiguation' not in elem or 'List_of_' not in elem:
@@ -189,29 +241,34 @@ def getDocsForClaim(claim,api_key,cse_id,predictor):
             if 'disambiguation' not in elem or 'List_of_' not in elem:
                     if elem not in docs:
                         docs.append(elem)
+    for elem,_ in docs_tfidf:
+            if 'disambiguation' not in elem or 'List_of_' not in elem:
+                    if elem not in docs:
+                        docs.append(elem)
+                        
     docs = [[d] for d in docs ]
-    return docs
+    return dict(predicted_pages=docs, predicted_google=docs_google,
+                predicted_ner=docs_ner, predicted_dep_parse=docs_dep_parse,
+                predicted_tfidf=docs_tfidf)
 
-
-
-def getDocsSingle(data,api_key,cse_id,predictor):
+def getDocsSingle(data,google_config,predictor,ranker):
     if str(type(data))=="<class 'dict'>":
-        return getDocsForClaim(data['claim'],api_key,cse_id,predictor)
+        return getDocsForClaim(data['claim'],google_config,predictor,ranker)
     if str(type(data))=="<class 'list'>":
         print('here')
         a = []
         for d in data:
             claim = d['claim']
-            docs = getDocsForClaim(claim,api_key,cse_id,predictor)
-            d['predicted_pages'] = docs
+            docs = getDocsForClaim(claim,google_config,predictor,ranker)
+            d.update(docs)
             a.append(d)
         return a
 
 
-def getDocsBatch(file,api_key,cse_id,predictor):
+def getDocsBatch(file,google_config,predictor,ranker):
     for line in open(file):
         line = json.loads(line.strip())
-        line['predicted_pages'] = getDocsForClaim(line['claim'],api_key,cse_id,predictor)
+        line.update(getDocsForClaim(line['claim'],google_config,predictor,ranker))
         yield line
 
 
@@ -231,6 +288,7 @@ if __name__ == '__main__':
     outfilename = sys.argv[4]
     #api_key = os.environ['API_KEY']
     #search_id = os.environ['SEARCH_ID']
+    google_config = GoogleConfig(api_key, cse_id)
     with open(outfilename, 'w') as outfile:
-        for docs in getDocsBatch(filename, api_key, cse_id):
+        for docs in getDocsBatch(filename, google_config, predictor):
             print(json.dumps(docs), file=outfile)

@@ -94,6 +94,7 @@ class ActorCritic(nn.Module):
         
         outputs = []
         dists = []
+        states = []
         
         lstm_in = self._ext._init_i.view(1,1,-1)
         lstm_states = (self._ext._init_h.unsqueeze(1), self._ext._init_c.unsqueeze(1))
@@ -104,6 +105,8 @@ class ActorCritic(nn.Module):
             for hop in range(self._ext._n_hop):
                 query = ActorCritic.attention(hop_feat, query,
                                               self._ext._hop_v, self._ext._hop_wq, mask=memory_mask)
+            states.append(query)
+            
             score = ActorCritic.attention_score(
                 attn_feat, query, self._ext._attn_v, self._ext._attn_wq, mask=memory_mask)
             #print(score.shape)
@@ -141,7 +144,7 @@ class ActorCritic(nn.Module):
             
             lstm_in = attn_mem[out.data[0]].view(1,1,-1)
 
-        return outputs, dists
+        return dict(idxs=outputs, probs=dists, states=torch.cat(states, dim=0).unsqueeze(0))
 
     @staticmethod
     def attention_score(attention, query, v, w, mask=None):
@@ -162,22 +165,23 @@ class ActorCritic(nn.Module):
         output = torch.mm(score, attention)
         return output
         
-    def forward(self, enc_out, n_abs, memory_mask=None, gold_evidence=None, evidence_len=None):
-        beam_size = 5
+    def forward(self, enc_out, n_abs, memory_mask=None, gold_evidence=None, evidence_len=None,
+                beam_size = 5):
+
         if not self.training and beam_size >= 1:
             enc_out = enc_out.unsqueeze(0)
             memory_mask = memory_mask.unsqueeze(0)
-            outputs = self._ext.extract(enc_out, None, n_abs, mask=memory_mask).view(-1)
+            outputs = self._ext.extract(enc_out, None, n_abs, mask=memory_mask,
+                                        beam_size=beam_size)
+            outputs['idxs'] = outputs['idxs'].view(-1)
             #print(outputs)
-            outputs = (outputs, outputs)
         elif self.training and evidence_len is not None and gold_evidence is not None:
             bs, nt = gold_evidence.size()
             d = enc_out.size(2)
             ptr_in = torch.gather(
                 enc_out, dim=1, index=gold_evidence.clamp(min=0).unsqueeze(2).expand(bs, nt, d)
             )
-            scores = self._ext(enc_out, evidence_len, ptr_in)
-            return None, scores        
+            return self._ext(enc_out, evidence_len, ptr_in)
         elif n_abs is None:            
             outputs = self._extract(enc_out, memory_mask=memory_mask, gold_evidence=gold_evidence)
         else:
@@ -185,7 +189,5 @@ class ActorCritic(nn.Module):
                                 gold_evidence=gold_evidence)
             
         if self.training:
-            scores = self._scr(enc_out, n_abs, memory_mask=memory_mask)
-            return outputs, scores
-        else:
-            return outputs, None
+            outputs['scores'] = self._scr(enc_out, n_abs, memory_mask=memory_mask)
+        return outputs
