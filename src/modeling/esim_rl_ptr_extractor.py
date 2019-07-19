@@ -335,7 +335,9 @@ class ESIMRLPtrExtractor(Model):
                 index = index * l.long().unsqueeze(-1)
                 selected_features = torch.gather(features, dim=1,
                                                  index=index)
-            
+
+            #UNDO!!!!!
+            selected_features = selected_features[:,:,:200]
             label_logits = self._entailment_esim(selected_premise, hypothesis,
                                                 premise_mask=selected_mask,
                                                 features=selected_features)

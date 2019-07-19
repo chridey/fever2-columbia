@@ -206,8 +206,13 @@ def getDocumentsForNer(claim,predictor):
     rec = list(set(rec))
     return rec
 
+def getDocsFromTFIDF(claim, ranker, k=10):
+    doc_names, doc_scores = ranker.closest_docs(claim, k)
 
-def getDocsForClaim(claim,google_config,predictor):
+    pages = list(zip(doc_names, doc_scores))
+    return pages
+
+def getDocsForClaim(claim,google_config,predictor,ranker):
     try:
         docs_google = getDocumentsForClaimFromGoogle(claim,google_config)
     except Exception:
@@ -220,6 +225,10 @@ def getDocsForClaim(claim,google_config,predictor):
         docs_dep_parse = getDocumentsFromDepParse(claim)
     except Exception:
         docs_dep_parse = []
+    try:
+        docs_tfidf = getDocsFromTFIDF(claim, ranker)
+    except Exception:
+        docs_tfidf = []
     docs = []
     for elem in docs_google:
             if 'disambiguation' not in elem or 'List_of_' not in elem:
@@ -232,28 +241,34 @@ def getDocsForClaim(claim,google_config,predictor):
             if 'disambiguation' not in elem or 'List_of_' not in elem:
                     if elem not in docs:
                         docs.append(elem)
+    for elem,_ in docs_tfidf:
+            if 'disambiguation' not in elem or 'List_of_' not in elem:
+                    if elem not in docs:
+                        docs.append(elem)
+                        
     docs = [[d] for d in docs ]
     return dict(predicted_pages=docs, predicted_google=docs_google,
-                predicted_ner=docs_ner, predicted_dep_parse=docs_dep_parse)
+                predicted_ner=docs_ner, predicted_dep_parse=docs_dep_parse,
+                predicted_tfidf=docs_tfidf)
 
-def getDocsSingle(data,google_config,predictor):
+def getDocsSingle(data,google_config,predictor,ranker):
     if str(type(data))=="<class 'dict'>":
-        return getDocsForClaim(data['claim'],google_config,predictor)
+        return getDocsForClaim(data['claim'],google_config,predictor,ranker)
     if str(type(data))=="<class 'list'>":
         print('here')
         a = []
         for d in data:
             claim = d['claim']
-            docs = getDocsForClaim(claim,google_config,predictor)
+            docs = getDocsForClaim(claim,google_config,predictor,ranker)
             d.update(docs)
             a.append(d)
         return a
 
 
-def getDocsBatch(file,google_config,predictor):
+def getDocsBatch(file,google_config,predictor,ranker):
     for line in open(file):
         line = json.loads(line.strip())
-        line.update(getDocsForClaim(line['claim'],google_config,predictor))
+        line.update(getDocsForClaim(line['claim'],google_config,predictor,ranker))
         yield line
 
 

@@ -37,7 +37,11 @@ class FeverScore(Metric):
                                                                 evidence_predictions)):
             #print(predictions[idx], gold_labels[idx].item(), is_correct.item(),
             #      evidence_prediction, metadata[idx])
-            if gold_labels[idx] != self.nei_label:
+            try:
+                gold_label = gold_labels[idx]
+            except IndexError:
+                gold_label = gold_labels.item()
+            if gold_label != self.nei_label:
                 total_evidence_count += 1
                 #TODO: subset evidence
                 evidence_metadata = {tuple(metadata[idx]['evidence'][i]) for i in evidence_prediction[:self.max_select] if i < len(metadata[idx]['evidence'])}
@@ -49,7 +53,7 @@ class FeverScore(Metric):
                         break                
                 correct_evidence_count += found_evidence
                 
-            if is_correct and (gold_labels[idx] == self.nei_label or found_evidence):
+            if is_correct and (gold_label == self.nei_label or found_evidence):
                 total_correct += 1
 
                 fever_recall.append(1)
@@ -61,7 +65,7 @@ class FeverScore(Metric):
         self.total_evidence_count += total_evidence_count
         self.correct_evidence_count += correct_evidence_count
         
-        self.total_count += int(gold_labels.shape[0])
+        self.total_count += (idx+1)#int(gold_labels.size(0))
         self.correct_count += total_correct
 
         fever_recall = torch.autograd.Variable(torch.FloatTensor(fever_recall))

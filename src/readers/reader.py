@@ -61,7 +61,8 @@ class FEVERReader(BaseReader):
                  prepend_title=True,
                  bert_batch_mode=False,
                  cached_features_size=0,
-                 titles_only=False) -> None:
+                 titles_only=False,
+                 cuda_device=-1) -> None:
 
         assert(cached_features_size == 0 or cached_features_size % batch_size == 0)
         
@@ -98,6 +99,7 @@ class FEVERReader(BaseReader):
         self.bert_feature_extractor = None
         self.bert_batch_mode = False
         if bert_extractor_settings is not None:
+            bert_extractor_settings['cuda_device'] = cuda_device
             self.bert_feature_extractor = BertFeatureExtractor(**bert_extractor_settings,
                                                                label_map=self.label_lookup)
             self.bert_batch_mode = bert_batch_mode
@@ -204,7 +206,8 @@ class FEVERReader(BaseReader):
                 instance['gold_evidence'] = instance['evidence']
             if self._titles_only:
                 instance['gold_evidence'] = [{(None,None,j[-2],0) for j in i} for i in instance['gold_evidence']]
-            gold = [{(e[2],e[3]) for e in evidence_set} for evidence_set in instance['gold_evidence']]
+
+            gold = [{(e[-2],e[-1]) for e in evidence_set} for evidence_set in instance['gold_evidence']]
                 
             if 'predicted_pages' in instance:
                 if self._titles_only:
@@ -219,11 +222,11 @@ class FEVERReader(BaseReader):
                     choice = min(zip(range(len(instance['gold_evidence'])),
                                     instance['gold_evidence']),
                                 key=lambda x:len(x[1]))[0]
-                    instance['gold_evidence'] = [(ev[2],ev[3]) for ev in instance['gold_evidence'][choice]]
+                    instance['gold_evidence'] = [(ev[-2],ev[-1]) for ev in instance['gold_evidence'][choice]]
                 else:
                     gold_evidence = []
                     for evidence_set in instance['gold_evidence']:
-                        gold_evidence.extend([(ev[2],ev[3]) for ev in evidence_set])
+                        gold_evidence.extend([(ev[-2],ev[-1]) for ev in evidence_set])
                     instance['gold_evidence'] = gold_evidence
                     
             instance_evidence_list = instance['evidence']
@@ -418,7 +421,7 @@ class FEVERReader(BaseReader):
         if premise is not None:            
             if self.list_field:
                 if len(premise) < self.max_selected_evidence:
-                    evidence_metadata.extend([['N/A',0]]*(self.max_selected_evidence-len(premise)))
+                    evidence_metadata['evidence'].extend([['N/A',0]]*(self.max_selected_evidence-len(premise)))
                     premise = list(premise) + ['']*(self.max_selected_evidence-len(premise))
                 #if evidence_metadata is None:
                 premise_tokens = [TextField(self._wiki_tokenizer.tokenize(p)[:self.evidence_memory_size],
