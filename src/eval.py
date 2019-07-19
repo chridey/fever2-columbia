@@ -75,7 +75,7 @@ def eval_model(args) -> Model:
 
             reformulated_claim, flag = isClaimEligibleForDateCalculation(item.fields["claim"])
             if flag:
-                cls = getDateClaimLabel(item.fields["claim"],predicted_sentences,reader,open_ie_predictor)
+                cls = getDateClaimLabel(reformulated_claim,predicted_sentences,reader,open_ie_predictor)
             else:
                 cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
             print(cls)
