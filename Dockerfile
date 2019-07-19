@@ -43,6 +43,11 @@ RUN ln -s data/fever.db
 RUN pip install -r requirements.txt
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
 
+RUN wget -O data/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz http://www.cs.columbia.edu/nlp/fever/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz
+RUN ln -s data/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz
+RUN wget -O data/glove.6B.300d.txt.gz http://www.cs.columbia.edu/nlp/fever/glove.6B.300d.txt.gz
+RUN ln -s data/glove.6B.300d.txt.gz
+
 ADD predict.sh .
 
 ENV PYTHONPATH src
