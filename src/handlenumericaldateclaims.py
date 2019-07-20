@@ -4,6 +4,7 @@ from string import Template
 from allennlp.predictors.predictor import Predictor
 import json
 
+
 def reformulate_query(claim):
 	m = {'first-decade': '00 and 09','second-decade': '10 and 19','third-decade': '20 and 29',
 			'fourth-decade': '30 and 39','fifth-decade': '40 and 49','sixth-decade': '50 and 59',
@@ -131,6 +132,8 @@ def getOpenIEdateArguments(argument,predictor):
 					event = event+description[d]
 					if description[d]==']':
 						break
+			else:
+				continue
 			c = d+1
 			if event!='':
 				events.append(event)
@@ -195,7 +198,7 @@ def getVerdict(claim,evidence,predictor):
 		elif match is not None and 'before' in elem:
 			x = elem.split()
 			for i in range(len(x)):
-				if x[i]=='before':
+				if x[i]=='before' and isDate(x[i+1]):
 					if x[i+1].endswith(']'):
 						x[i+1] = x[i+1][:-1]
 					date1 = int(x[i+1])
@@ -203,7 +206,7 @@ def getVerdict(claim,evidence,predictor):
 		elif match is not None and 'after' in elem:
 			x = elem.split()
 			for i in range(len(x)):
-				if x[i]=='after':
+				if x[i]=='after' and isDate(x[i+1]):
 					if x[i+1].endswith(']'):
 						x[i+1] = x[i+1][:-1]
 					date1 = int(x[i+1])
@@ -211,7 +214,7 @@ def getVerdict(claim,evidence,predictor):
 		elif match is not None and 'in' in elem:
 			x = elem.split()
 			for i in range(len(x)):
-				if x[i]=='in' and x[i+1]!='the':
+				if x[i]=='in' and x[i+1]!='the' and isDate(x[i+1]):
 					if x[i+1].endswith(']'):
 						x[i+1] = x[i+1][:-1]
 					date1 = int(x[i+1])
@@ -238,7 +241,7 @@ def getVerdict(claim,evidence,predictor):
 			else:
 				x = elem.split()
 				for i in range(len(x)):
-					if len(x[i])==4 and x[i][0]>='1' and x[i][0]<='9':
+					if len(x[i])==4 and x[i][0]>='0' and x[i][0]<='9' and x[i][3]>='0' and x[i][3]<='9':
 						if x[i].endswith(']'):
 							x[i] = x[i][:-1]
 						evdate = int(x[i])
@@ -289,16 +292,16 @@ def isClaimEligibleForDateCalculation(claim):
 	words = claim.split()
 	for i in range(len(words)):
 		if (words[i]=='before' or words[i]=='after') and (i+1<len(words) and (isDate(words[i+1]) or isDateRange(words[i+1]))):
-			return True
+			return claim,True
 
 		if (i-1>=0 and (words[i-1]=='years' or words[i-1]=='year')) and (i+1<len(words) and (isDate(words[i+1]) or isDateRange(words[i+1]))):
-			return True
+			return claim ,True
 
 		if (i-2>=0 and words[i-2]=='in') and (i-1>=0 and words[i-1]=='the') and (isDateRange(words[i])):
-			return True
+			return claim ,True
 
 		if (words[i]=='between') and (i+1<len(words) and isDate(words[i+1])):
-			return True
+			return claim ,True
 
 	return claim , False
 
