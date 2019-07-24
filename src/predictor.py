@@ -5,9 +5,11 @@ import numpy as np
 
 from allennlp.models import Model, archive_model, load_archive
 from allennlp.nn import util
+from allennlp.service.predictors import Predictor as AllenNLPPredictor
 
 from readers.reader import FEVERReader
 from modeling.esim_rl_ptr_extractor import ESIMRLPtrExtractor
+from handlenumericaldateclaims import isClaimEligibleForDateCalculation,getDateClaimLabel
 
 logger = logging.getLogger()
 
@@ -19,12 +21,13 @@ class Predictor:
         logger.info("Loading FEVER Reader")
         ds_params = archive.config["dataset_reader"]
         ds_params["cuda_device"] = cuda_device
-        reader = FEVERReader.from_params(ds_params)
+        self.reader = FEVERReader.from_params(ds_params)
+
+        self.open_ie_predictor = AllenNLPPredictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp/models/openie-model.2018-08-20.tar.gz")
         
         self.model = archive.model
         self.model.eval()        
-        self.reader = reader
-        self.reverse_labels = {j:i for i,j in reader.label_lookup.items()}
+        self.reverse_labels = {j:i for i,j in self.reader.label_lookup.items()}
 
         self.predicted_pages = predicted_pages
         self.merge_google = merge_google
@@ -50,11 +53,13 @@ class Predictor:
                 if 'predicted_sentences' in prediction:
                     predicted_sentences = [list(metadata['evidence'][i]) for i in prediction['predicted_sentences']]
 
-                if "label_sequence_logits" in prediction:
+                reformulated_claim, flag = isClaimEligibleForDateCalculation(raw_data[idx]["claim"])
+                if flag:
+                    cls = getDateClaimLabel(reformulated_claim,predicted_sentences,self.reader,self.open_ie_predictor).upper()
+                elif "label_sequence_logits" in prediction:
                     cls = self.reverse_labels[int(np.argmax(prediction["label_sequence_logits"].sum(axis=-2)))]
                     if self.verbose:
-                        print([self.reverse_labels[int(i)] for i in np.argmax(prediction["label_sequence_logits"], axis=-1)])
-                
+                        print([self.reverse_labels[int(i)] for i in np.argmax(prediction["label_sequence_logits"], axis=-1)])                
                 else:
                     cls = self.reverse_labels[int(np.argmax(prediction["label_probs"]))]
 
