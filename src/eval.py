@@ -56,44 +56,6 @@ def eval_model(args) -> None:
 
     #print({util.get_device_of(param) for param in model.parameters()})
 
-    '''
-    for idx,item in enumerate(data):
-        predicted_sentences = None
-        if item.fields["premise"] is None or item.fields["premise"].sequence_length() == 0:
-            cls = "NOT ENOUGH INFO"
-        else:
-            metadata = item.fields['metadata'] #[i._metadata for i in item.fields['premise'].field_list]
-            #try:
-            prediction = model.forward_on_instance(item)
-            #except RuntimeError as e:
-            #    print(e)
-            #    prediction = dict(predicted_sentences=[], label_probs=[0,0,1])
-                
-            if 'predicted_sentences' in prediction:
-<<<<<<< HEAD
-                predicted_sentences = [list(metadata[i]) for i in prediction['predicted_sentences']]
-                #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])            
-            
-
-            reformulated_claim, flag = isClaimEligibleForDateCalculation(item.fields["claim"])
-            if flag:
-                cls = getDateClaimLabel(reformulated_claim,predicted_sentences,reader,open_ie_predictor)
-=======
-                predicted_sentences = [list(metadata['evidence'][i]) for i in prediction['predicted_sentences']]
-                #print([metadata[i.sequence_index] for i in item.fields['evidence'].field_list if i.sequence_index != -1])
-
-            if "label_sequence_logits" in prediction:
-                cls = reverse_labels[int(np.argmax(prediction["label_sequence_logits"].sum(axis=-2)))]
-                print([reverse_labels[int(i)] for i in np.argmax(prediction["label_sequence_logits"], axis=-1)])
-                
->>>>>>> fixers
-            else:
-                cls = reverse_labels[int(np.argmax(prediction["label_probs"]))]
-            print(cls)
-            print(predicted_sentences)
-            print(model.get_metrics())
-    '''
-
     for output in predictor.predict(raw_data[args.start:args.end]):
         actual.append(output['actual'] if 'actual' in output else output['label'])
         predicted.append(output['predicted_label'] if 'predicted_label' in output else output['predicted'])
