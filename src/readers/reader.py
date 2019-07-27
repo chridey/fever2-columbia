@@ -204,6 +204,8 @@ class FEVERReader(BaseReader):
 
             if 'gold_evidence' not in instance and 'evidence' in instance:
                 instance['gold_evidence'] = instance['evidence']
+            else:
+                instance['gold_evidence'] = []
             if self._titles_only:
                 instance['gold_evidence'] = [{(None,None,j[-2],0) for j in i} for i in instance['gold_evidence']]
 
@@ -326,7 +328,7 @@ class FEVERReader(BaseReader):
                     self._features_cache[file_path] = dict(zip(indices, features))
 
                 if self.include_features and not self.bert_batch_mode and line_index not in self._features_cache[file_path]:
-                    instance_features = self.bert_feature_extractor.forward_on_single(instance['id'],
+                    instance_features = self.bert_feature_extractor.forward_on_single(instance.get('id',0),
                                                                                       hypothesis,
                                                                                       premise,
                                                                                       label).cpu().numpy().tolist()
@@ -334,7 +336,7 @@ class FEVERReader(BaseReader):
                 elif self.bert_batch_mode and len(premise) < self.evidence_memory_size:
                     premise = list(premise) + ['']*(self.evidence_memory_size-len(premise))
                 
-                examples.append([instance['id'], hypothesis, None, label, premise])
+                examples.append([instance.get('id', 0), hypothesis, None, label, premise])
 
                 if len(examples) >= self.batch_size:
                     batch_features = None

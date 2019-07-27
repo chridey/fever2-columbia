@@ -73,10 +73,11 @@ class Predictor:
                 output.update({"predicted_pages": predicted_sentences,
                                "predicted_label":cls})
             elif self.score_format:
-                output = {"actual":raw_data[idx]['label'],"predicted":cls,
+                output = {"actual":raw_data[idx].get('label', 'NOT ENOUGH INFO'),"predicted":cls,
                           "predicted_sentences":predicted_sentences}
             else:
-                output = {"actual":raw_data[idx]['label'],"predicted_label":cls,
+                output = {"actual":raw_data[idx].get('label', 'NOT ENOUGH INFO'),
+                          "predicted_label":cls,
                           "predicted_evidence":predicted_sentences}
 
             yield output

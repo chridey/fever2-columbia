@@ -45,8 +45,9 @@ def my_sample_fever():
     ranker = retriever.get_class('tfidf')(tfidf_path=config['retrieval']['tfidf']['index'])
 
     predictors = {}
-    for key in ('page_model', 'state_model'):    
-        predictors[key] = ColumbiaPredictor(config[key]['path'],
+    for key in ('page_model', 'state_model'):
+        path = config[key].pop('path')
+        predictors[key] = ColumbiaPredictor(path,
                                             config['cuda_device'],
                                             **config[key])
             
