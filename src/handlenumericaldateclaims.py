@@ -3,6 +3,7 @@ import re
 from string import Template
 from allennlp.predictors.predictor import Predictor
 import json
+from word2number import w2n
 
 
 def reformulate_query(claim):
