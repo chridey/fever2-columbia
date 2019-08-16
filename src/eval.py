@@ -57,7 +57,7 @@ def eval_model(args) -> None:
     #print({util.get_device_of(param) for param in model.parameters()})
 
     for output in predictor.predict(raw_data[args.start:args.end]):
-        actual.append(output['actual'] if 'actual' in output else output['label'])
+        actual.append(output['actual'] if 'actual' in output else output.get('label', 'NOT ENOUGH INFO'))
         predicted.append(output['predicted_label'] if 'predicted_label' in output else output['predicted'])
         '''
         gold = reverse_labels[item.fields["label"].label]
@@ -84,9 +84,10 @@ def eval_model(args) -> None:
     if args.log is not None:
         f.close()
 
-    print(accuracy_score(actual, predicted))
-    print(classification_report(actual, predicted))
-    print(confusion_matrix(actual, predicted))
+    if args.verbose:
+        print(accuracy_score(actual, predicted))
+        print(classification_report(actual, predicted))
+        print(confusion_matrix(actual, predicted))
 
 if __name__ == "__main__":
 
