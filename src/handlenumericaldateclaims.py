@@ -3,6 +3,7 @@ import re
 from string import Template
 from allennlp.predictors.predictor import Predictor
 import json
+from word2number import w2n
 
 
 def reformulate_query(claim):
@@ -181,6 +182,8 @@ def getVerdict(claim,evidence,predictor):
 						x[i-1] = x[i-1][:-1]
 					if x[i+2].endswith(']'):
 						x[i+2] = x[i+2][:-1]
+					if x[i-1].isalpha()==True:
+						x[i-1] = str(w2n.word_to_num(x[i-1]))
 					y = int(x[i-1])
 					z = int(x[i+2])
 					date1 = z-y
@@ -192,6 +195,8 @@ def getVerdict(claim,evidence,predictor):
 						x[i-1] = x[i-1][:-1]
 					if x[i+2].endswith(']'):
 						x[i+2] = x[i+2][:-1]
+					if x[i-1].isalpha()==True:
+						x[i-1] = str(w2n.word_to_num(x[i-1]))
 					y = int(x[i-1])
 					z = int(x[i+2])
 					date1 = y+z
