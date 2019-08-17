@@ -234,7 +234,7 @@ def getVerdict(claim,evidence,predictor):
 			if 'between' in elem:
 				x = elem.split()
 				for i in range(len(x)):
-					if x[i]=='between' and x[i+2]=='and':
+					if x[i]=='between' and isDate(x[i+1]) and x[i+2]=='and':
 						if x[i+1].endswith(']'):
 							x[i+1] = x[i+1][:-1]
 						if d1 is not None and int(x[i+1])!=d1:
