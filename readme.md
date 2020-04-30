@@ -1,5 +1,49 @@
-# For Doc Retrival one of our components depends on Google Custom Search. 
+Code for the paper "DeSePtion: Dual Sequence Prediction and Adversarial Examples for Improved Fact-Checking"
 
+To install the software, run the following commands in this order:
+```
+pip install spacy==2.1.3
+python -m spacy download en
+pip install -r requirements.txt
+python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
+```
+
+# Evaluation
+To run the full pipeline for inference, use the following sequence of commands:
+```
+default_cuda_device=0
+
+python -m retrieve $1 /tmp/ir.candidates.$(basename $1) \
+    --config configs/system_config.json
+
+python -m eval page_model.tar.gz  \
+    /tmp/ir.candidates.$(basename $1) \
+    --log /tmp/ir.$(basename $1) \
+    --predicted-pages --merge-google \
+    --cuda-device ${CUDA_DEVICE:-$default_cuda_device} \
+    
+python -m eval state_model.tar.gz  \
+    /tmp/ir.$(basename $1) \
+    --log $2 \
+    --cuda-device ${CUDA_DEVICE:-$default_cuda_device}
+```
+
+Prior to running the model, the following files are needed:
+1) Pre-trained pointer network models (page_model.tar.gz and state_model.tar.gz) and fine-tuned BERT models (bert-pages.tar.gz and bert-fever-gold.tar.gz). Available upon request.
+2) FEVER 1.0 and 2.0 data
+3) The version of preprocessed Wikipedia for FEVER (can be downloaded from the organizers here: https://s3-eu-west-1.amazonaws.com/fever.public/wiki_index/fever.db)
+4) The TF-IDF index and Google search API key
+
+## Document Retrieval 
+
+### TF-IDF
+After installing DrQA, run the following command to build the index:
+```
+DrQA/scripts/retriever/build_tfidf.py fever.db index/
+```
+This will create a file called fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz.
+
+### Google Custom Search
 * To be able to use this one needs to create a developer API Key
   More information here : https://support.google.com/googleapi/answer/6158862?hl=en
 * Custom Search ID 
@@ -9,247 +53,24 @@ One of the important factors to consider is the first 100 google search api call
 Then onwards one is charged 5$ for every 1000 search api calls (Limit for one day. You cannot call more than 1000 times using one api-key)
 Having google cloud credits will be helpful in such cases (Free signup gives 300$)
 
-# Sample FEVER2.0 builder docker image
+# Training
+To re-train the entire pipeline, follow the same steps as for evaluation (except for running the eval script). Then, fine-tune the BERT models and train a document ranker and joint sentence and relation model.
 
-The FEVER2.0 shared task requires builders to submit Docker images (via dockerhub) as part of the competition to allow 
-for adversarial evaluation. Images must contain a single script to make predictions on a given input file using their model and host a web server (by installing the [`fever-api`](https://github.com/j6mes/fever-api) pip package) to allow for interactive evaluation as part of the _breaker_ phase of the competition.
- 
-This repository contains an example submission based on an AllenNLP implementation of the system (see [`fever-allennlp`](https://github.com/j6mes/fever-allennlp)). We go into depth for the following key information:
-
-* [Prediction Script](#prediction-script)
-* [Entrypoint](#entrypoint)
-* [Web Server](#web-server)
-* [Common Data](#common-data)
-
-It can be run with the following commands. The first command creates a dummy container with the shared FEVER data that is used by the submission.
-
-```bash
-#Set up the data container (run once on first time)
-docker create --name fever-common feverai/common
-
-#Start a server for interactive querying of the FEVER system via the web API on port 5000
-docker run --rm --volumes-from fever-common:ro -p 5000:5000 feverai/sample
-
-#Alternatively, make predictions on a batch file and output it to `/out/predictions.jsonl` (set CUDA_DEVICE as appropriate)
-docker run --rm --volumes-from fever-common:ro -e CUDA_DEVICE=-1 -v $(pwd):/out feverai/sample ./predict.sh /local/fever-common/data/fever-data/paper_dev.jsonl /out/predictions.jsonl
+# BERT Fine-Tuning
+To re-train the BERT fine-tuned models, run the huggingface script (https://github.com/huggingface/pytorch-pretrained-BERT):
+```
+pytorch-pretrained-BERT/examples/run_classifier.py --data_dir INPUT_DIR --bert_model bert-base-uncased --task_name TASK_NAME --output_dir OUTPUT_DIR --do_train --do_eval --do_lower_case --train_batch_size BATCH_SIZE  --learning_rate LEARNING_RATE --num_train_epochs NUM_EPOCHS
 ```
 
-### Shared Resources and Fair Use
-The FEVER2.0 submissions will be run in a shared environment where resources will be moderated. We urge participants to ensure that these shared resources are respected.
+TASK_NAME for claim/title pairs is "mrpc" and for sentence/title pairs is "mnli."
 
-Tensorflow users are asked to implement per-process GPU memory limits: [see this post](https://stackoverflow.com/questions/34199233/how-to-prevent-tensorflow-from-allocating-the-totality-of-a-gpu-memory). We will set an environment variable `$TF_GPU_MEMORY_FRACTION` that will be tweaked for all systems in phase 2 of the shared task. 
-
-
-## Prediction Script
-The prediction script should take 2 parameters as input: the path to input file to be predicted and the path the output file to be scored:
-
-An optional `CUDA_DEVICE` environment variable should be set  
-
-```bash
-#!/usr/bin/env bash
-
-default_cuda_device=0
-root_dir=/local/fever-common
+The datasets of claim/title pairs and sentence/title pairs are available upon request.
 
 
-python -m fever.evidence.retrieve \
-    --index $root_dir/data/index/fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz \
-    --database $root_dir/data/fever/fever.db \
-    --in-file $1 \
-    --out-file /tmp/ir.$(basename $1) \
-    --max-page 5 \
-    --max-sent 5
-
-python -m allennlp.run predict \
-    https://jamesthorne.co.uk/fever/fever-da.tar.gz \
-    /tmp/ir.$(basename $1) \
-    --output-file /tmp/labels.$(basename $1) \
-    --predictor fever \
-    --include-package fever.reader \
-    --cuda-device ${CUDA_DEVICE:-$default_cuda_device} \
-    --silent
-
-python -m fever.submission.prepare \
-    --predicted_labels /tmp/labels.$(basename $1) \
-    --predicted_evidence /tmp/ir.$(basename $1) \
-    --out_file $2
-
-``` 
-
-## Entrypoint
-The submission must run a flask web server to allow for interactive evaluation. In our application, the entrypoint is a function called `my_sample_fever` in the module `sample_application` (see `sample_application.py`).
-The `my_sample_fever` function is a factory that returns a `fever_web_api` object. 
-
-``` python
-from fever.api.web_server import fever_web_api
-
-def my_sample_fever(*args):
-    # Set up and initialize model
-    ...
-    
-    # A prediction function that is called by the API
-    def baseline_predict(instances):
-        predictions = []
-        for instance in instances:
-            predictions.append(...prediction for instance...)
-        return predictions
-
-    return fever_web_api(baseline_predict)
+# Pointer Network Training
+To re-train the pointer network models, run the following command:
+```
+train.py CONFIG OUTDIR --cuda-device CUDA_DEVICE
 ```
 
-Your dockerfile can then use the `waitress-serve` method as the entrypoint. This will start a wsgi server calling your factory method
-
-```dockerfile
-CMD ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--call", "sample_application:my_sample_fever"]
-``` 
-
-
-## Web Server
-The web server is managed by the `fever-api` package. No setup or modification is required by participants. We use the default flask port of `5000` and host a single endpoint on `/predict`. We recommend using a client such as [Postman](https://www.getpostman.com/) to test your application.
-
-
-```
-POST /predict HTTP/1.1
-Host: localhost:5000
-Content-Type: application/json
-
-{
-	"instances":[
-	    {"id":0,"claim":"this is a test claim"}, 
-	    {"id":1,"claim":"this is another test claim"}, 
-	]
-}
-```
-
-## API
-In our sample submission, we present a simple method `baseline_predict` method. 
-
-```python 
-   def baseline_predict(instances):
-        predictions = []
-        for instance in instances:
-            ...prediction for instance...
-            predictions.append({"predicted_label":"SUPPORTS", 
-                                "predicted_evidence": [(Paris,0),(Paris,5)]})
-            
-        return predictions
-```
-
-Inputs: 
-
- * `instances` - a list of dictionaries containing a `claim` 
-
-Outputs:
-
- * A list of dictionaries containing `predicted_label` (string in SUPPORTS/REFUTES/NOT ENOUGH INFO) and `predicted_evidence` (list of `(page_name,line_number)` pairs as defined in [`fever-scorer`](https://github.com/sheffieldnlp/fever-scorer).
-
-
-## Testing the Server
-
-After starting the server using waitress, you can test using the requests library:
-
-```
-import requests
-import json
-
-url = 'http://0.0.0.0:5000/predict'
-data = {"instances": [{"id":0, "claim":"this is a test claim"},{"id":1,"claim":"this is another test claim"}]}
-headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
-
-r = requests.post(url, data=json.dumps(data), headers=headers)
-
-r.json()
-```
-
-```
-{u'data': {u'predictions': [{u'predicted_evidence': [[u'Theranos', 1],
-     [u'One_Million_Dollar_Paranormal_Challenge', 0],
-     [u'This', 0],
-     [u'Theranos', 0],
-     [u'Theranos', 9]],
-    u'predicted_label': u'REFUTES',
-    u'request_instance': {u'claim': u'this is a test claim',
-     u'evidence': [[u'This', 0],
-      [u'Theranos', 0],
-      [u'Theranos', 1],
-      [u'One_Million_Dollar_Paranormal_Challenge', 1],
-      [u'Theranos', 8],
-      [u'One_Million_Dollar_Paranormal_Challenge', 0],
-      [u'Theranos', 7],
-      [u'Theranos', 2],
-      [u'Theranos', 3],
-      [u'Theranos', 4],
-      [u'Theranos', 5],
-      [u'Theranos', 6],
-      [u'This', 4],
-      [u'This', 3],
-      [u'Theranos', 10],
-      [u'One_Million_Dollar_Paranormal_Challenge', 2],                     
-      [u'One_Million_Dollar_Paranormal_Challenge', 3],
-      [u'This', 1],
-      [u'This', 2],
-      [u'Theranos', 9]],
-     u'id': 0,
-     u'predicted_pages': [[u'Theranos'],
-      [u'One_Million_Dollar_Paranormal_Challenge'],
-      [u'This']]}},
-   {u'predicted_evidence': [[u'Turing_test', 12],
-     [u'Turing_test', 10],
-     [u'Turing_test', 0],
-     [u'Turing_test', 8],
-     [u'Turing_test', 16]],
-    u'predicted_label': u'NOT ENOUGH INFO',
-    u'request_instance': {u'claim': u'this is another test claim',
-     u'evidence': [[u'Turing_test', 4],
-      [u'Turing_test', 2],
-      [u'This', 0],
-      [u'Turing_test', 0],
-      [u'Turing_test', 10],
-      [u'Turing_test', 12],
-      [u'Turing_test', 11],
-      [u'Turing_test', 5],
-      [u'Turing_test', 16],
-      [u'Turing_test', 8],
-      [u'Isabella_of_France', 15],
-      [u'Isabella_of_France', 14],
-      [u'Isabella_of_France', 13],
-      [u'Isabella_of_France', 12],
-      [u'Isabella_of_France', 11],
-      [u'Isabella_of_France', 10],
-      [u'This', 4],
-      [u'Isabella_of_France', 9],
-      [u'Isabella_of_France', 8],
-      [u'Isabella_of_France', 17],
-      [u'Isabella_of_France', 7],
-      [u'Isabella_of_France', 6],
-      [u'Isabella_of_France', 5],
-      [u'Isabella_of_France', 4],
-      [u'Isabella_of_France', 3],
-      [u'Isabella_of_France', 2],
-      [u'Isabella_of_France', 1],
-      [u'Isabella_of_France', 16],	
-      [u'Isabella_of_France', 22],                            
-      [u'Isabella_of_France', 18],
-      [u'Turing_test', 9],
-      [u'This', 2],
-      [u'This', 1],
-      [u'Turing_test', 17],
-      [u'Turing_test', 15],
-      [u'Turing_test', 14],
-      [u'Turing_test', 13],
-      [u'Turing_test', 7],
-      [u'Isabella_of_France', 19],
-      [u'Turing_test', 6],
-      [u'Turing_test', 3],
-      [u'Turing_test', 1],
-      [u'This', 3],
-      [u'Isabella_of_France', 21],
-      [u'Isabella_of_France', 20],
-      [u'Isabella_of_France', 0]],
-     u'id': 1,
-     u'predicted_pages': [[u'Isabella_of_France'],
-      [u'Turing_test'],
-      [u'This']]}}]},
- u'result': u'success'}
-```
-  
+Example CONFIG files can be found in configs for document ranking (document_ranker.json) and joint sentence and relation prediction (joint_pointer.json).
