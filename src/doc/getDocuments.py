@@ -271,23 +271,12 @@ def getDocsBatch(file,google_config,predictor,ranker):
         line.update(getDocsForClaim(line['claim'],google_config,predictor,ranker))
         yield line
 
-
-
-# x = getDocumentsForClaimFromGoogle('The Dark Tower is a fantasy film.','AIzaSyDKwGzwuktKbxrqi7RITt_zt8e3EdSiu-E','003586599067453217566:gyrtvs2l70g')
-# print(x)
-
-# getDocsSingle({'id':0,'claim':'The Dark Tower is a fantasy film.'})
-# print(getDocsSingle([{'id':0,'claim':'The Dark Tower is a fantasy film.'},{'id':1,'claim':'"Down With Love is a 2003 comedy film.'}]))
-
-
-
 if __name__ == '__main__':
     filename = sys.argv[1]
     api_key = sys.argv[2]
     cse_id = sys.argv[3]
     outfilename = sys.argv[4]
-    #api_key = os.environ['API_KEY']
-    #search_id = os.environ['SEARCH_ID']
+
     google_config = GoogleConfig(api_key, cse_id)
     with open(outfilename, 'w') as outfile:
         for docs in getDocsBatch(filename, google_config, predictor):

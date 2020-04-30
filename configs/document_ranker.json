@@ -1,0 +1,105 @@
+{
+    "trainer": {
+        "cuda_device": 2,
+        "grad_clipping": 2,
+        "num_epochs": 140,
+        "optimizer": {
+            "lr": 0.01,
+            "type": "adagrad"
+        },
+        "patience": 100,
+        "validation_metric": "+FEVER"
+    },
+    "iterator": {
+        "batch_size": 16,
+        "sorting_keys": [
+            [
+                "premise",
+                "list_num_tokens"
+            ],
+            [
+                "hypothesis",
+                "num_tokens"
+            ]
+        ],
+        "type": "bucket"
+    },
+    "train_data_path": "train.predicted_pages.candidates.jsonl",
+    "validation_data_path": "dev.predicted_pages.candidates.jsonl",
+    "dataset_reader": {
+	"titles_only": true,
+        "batch_size": 50,
+        "bert_extractor_settings": {
+            "batch_size": 16,
+            "bert_model_name": "bert-base-uncased",
+            "cuda_device": 2,
+            "pretrained_file_name": "bert-pages.tar.gz"
+        },
+        "cached_features_size": 0,
+        "choose_min_evidence": true,
+        "claim_tokenizer": {
+            "end_tokens": [
+                "@@END@@"
+            ],
+            "type": "word",
+            "word_splitter": {
+                "type": "simple"
+            }
+        },
+        "db": "fever.db",
+        "evidence_indices": true,
+        "include_evidence": true,
+        "include_features": true,
+        "label_lookup": {
+            "NOT ENOUGH INFO": 2,
+            "REFUTES": 1,
+            "SUPPORTS": 0
+        },
+        "list_field": true,
+        "sentence_level": true,
+        "token_indexers": {
+            "tokens": {
+                "lowercase_tokens": true,
+                "type": "single_id"
+            }
+        },
+        "wiki_tokenizer": {
+            "end_tokens": [
+                "@@END@@"
+            ],
+            "type": "word",
+            "word_splitter": {
+                "type": "just_spaces"
+            }
+        }
+    },
+    "vocabulary": {
+        "directory_path": "vocabulary"
+    },
+    "model": {
+        "beam_size": 5,
+        "ei_reward_weight": 1,
+        "entailment_esim": {
+            "hidden_size": 200,
+            "model": "feature_model",
+            "num_labels": 3,
+            "num_sequences": 1,
+            "pooling": "concat"
+        },
+        "fix_entailment_params": false,
+        "fix_sentence_extraction_params": true,
+        "nei_label": 2,
+        "ptr_extract_summ": {
+            "input_dim": 768,
+            "lstm_hidden": 200,
+            "lstm_layer": 1,
+            "n_hop": 3
+        },
+        "sentence_esim": {
+            "model": "feature_model",
+            "num_sequences": 50
+        },
+        "train_gold_evidence": true,
+        "type": "esim_rl_ptr_extractor",
+    }
+}

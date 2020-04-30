@@ -1,5 +1,4 @@
 #taken from original FEVER code
-#Author: James Thorne
 
 import os
 

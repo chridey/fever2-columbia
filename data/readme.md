@@ -1,0 +1,4 @@
+This directory contains the subset of FEVER 2.0 development data that consists of the adversarial claims described in Section 4 of "DeSePtion: Dual Sequence Prediction and Adversarial Examples for Improved Fact-Checking."
+
+The file is formatted the same as the FEVER 1.0 data, where each line is a json object, except it includes an additional "attack" field.  The attacks are as described in the paper:
+word replacement (lexical substitution claims), date manipulation, Multihop, multi-hop temporal reasoning, conjunction, Phrasal Additions (additional unverifiable propositions), and Entity Disambiguation.

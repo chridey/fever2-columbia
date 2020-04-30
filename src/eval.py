@@ -16,25 +16,6 @@ from predictor import Predictor
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def eval_model(args) -> None:
-    '''
-    archive = load_archive(args.archive_file, cuda_device=args.cuda_device)
-    open_ie_predictor = Predictor.from_path("https://s3-us-west-2.amazonaws.com/allennlp/models/openie-model.2018-08-20.tar.gz")
-
-    config = archive.config
-    ds_params = config["dataset_reader"]
-
-    model = archive.model
-    model.eval()
-
-    ds_params["cuda_device"] = args.cuda_device
-    reader = FEVERReader.from_params(ds_params)
-
-            
-    logger.info("Reading data from %s", args.in_file)
-    data = reader.read(args.in_file, include_metadata=True, start=args.start)
-
-    reverse_labels = {j:i for i,j in reader.label_lookup.items()}
-    '''
 
     predictor = Predictor(args.archive_file,
                           args.cuda_device,
@@ -59,28 +40,8 @@ def eval_model(args) -> None:
     for output in predictor.predict(raw_data[args.start:args.end]):
         actual.append(output['actual'] if 'actual' in output else output.get('label', 'NOT ENOUGH INFO'))
         predicted.append(output['predicted_label'] if 'predicted_label' in output else output['predicted'])
-        '''
-        gold = reverse_labels[item.fields["label"].label]
-        actual.append(gold)
-        predicted.append(cls)
-        '''
         if args.log is not None:
             f.write(json.dumps(output)+"\n")
-            '''
-            if args.predicted_pages:
-                if args.merge_google:
-                    predicted_sentences = {i[0] for i in predicted_sentences}
-                    predicted_sentences.update(raw_data[idx]['predicted_google'])
-                    predicted_sentences = [[i] for i in predicted_sentences]
-                raw_data[idx].update({"predicted_pages": predicted_sentences})
-                f.write(json.dumps(raw_data[idx])+"\n")
-            elif args.score_format:
-                f.write(json.dumps({"actual":gold,"predicted":cls,
-                                    "predicted_sentences":predicted_sentences})+"\n")                
-            else:
-                f.write(json.dumps({"actual":gold,"predicted_label":cls,
-                                    "predicted_evidence":predicted_sentences})+"\n")
-            '''
     if args.log is not None:
         f.close()
 

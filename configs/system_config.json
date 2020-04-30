@@ -1,20 +1,20 @@
 {
     "page_model": {
-	"path": "http://www1.cs.columbia.edu/nlp/fever/page_model.tar.gz",
-	"predicted_pages": true,
-	"merge_google": true
+    "path": "DOCUMENT_RANKING_MODEL",
+    "predicted_pages": true,
+    "merge_google": true
     },
     "state_model": {
-	"path": "http://www1.cs.columbia.edu/nlp/fever/state_model.tar.gz"
+    "path": "JOINT_SENTENCE_AND_RELATION_MODEL",
     },
     "cuda_device": -1,
     "retrieval": {
-	"google": {
-	    "api_key": "",
+    "google": {
+        "api_key": "",
 	    "cse_id": ""
-	},
-	"tfidf": {
-	    "index": "fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz"
-	}
+	    },
+	    "tfidf": {
+	        "index": "fever-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz"
+		}
     }
 }
