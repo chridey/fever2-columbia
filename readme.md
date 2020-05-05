@@ -74,3 +74,12 @@ train.py CONFIG OUTDIR --cuda-device CUDA_DEVICE
 ```
 
 Example CONFIG files can be found in configs for document ranking (document_ranker.json) and joint sentence and relation prediction (joint_pointer.json).
+
+
+If you use code or data do cite us
+        @article{hidey2020deseption,
+          title={DeSePtion: Dual Sequence Prediction and Adversarial Examples for Improved Fact-Checking},
+          author={Hidey, Christopher and Chakrabarty, Tuhin and Alhindi, Tariq and Varia, Siddharth and Krstovski, Kriste and Diab, Mona and Muresan, Smaranda},
+          journal={arXiv preprint arXiv:2004.12864},
+          year={2020}
+        }
