@@ -25,7 +25,7 @@ dicttoxml==1.7.4
 docker==3.7.2
 docker-pycreds==0.4.0
 docutils==0.14
-ecdsa==0.13
+ecdsa==0.13.3
 editdistance==0.5.3
 elasticsearch==6.3.1
 fever-api==1.0.25
