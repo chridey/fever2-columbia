@@ -70,7 +70,7 @@ preshed==2.0.1
 prettytable==0.7.2
 protobuf==3.7.1
 ptyprocess==0.6.0
-py==1.8.0
+py==1.10.0
 pyaml==18.11.0
 pyasn1==0.4.5
 pycparser==2.19
