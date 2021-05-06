@@ -31,7 +31,7 @@ elasticsearch==6.3.1
 fever-api==1.0.25
 flaky==3.5.3
 Flask==1.0.2
-Flask-Cors==3.0.7
+Flask-Cors==3.0.9
 Flask-Responses==0.2
 ftfy==5.5.1
 future==0.17.1
