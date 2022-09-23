@@ -68,7 +68,7 @@ plac==0.9.6
 pluggy==0.9.0
 preshed==2.0.1
 prettytable==0.7.2
-protobuf==3.7.1
+protobuf==3.18.3
 ptyprocess==0.6.0
 py==1.8.0
 pyaml==18.11.0
